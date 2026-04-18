@@ -3,3 +3,10 @@
 3) learn nginx
 4) docker and docker compose up
 5) implement disk cache for api calls
+
+
+
+http://localhost:8080/authentik/
+
+Email: admin@example.com
+Password: admin

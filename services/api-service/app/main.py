@@ -1,12 +1,17 @@
+import logging
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, FastAPI, HTTPException
+import httpx
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, status
 from pydantic import BaseModel, Field
 
 from app.auth import realm_roles, require_roles
+from app.authentik_password_login import login_with_credentials
 from app.config import settings
 from app.proxy import agent_get, agent_post, execution_post, knowledge_get, knowledge_post
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="API Gateway (BFF)", version="0.1.0")
 router = APIRouter(prefix="/api/v1")
@@ -33,6 +38,33 @@ class ChatBody(BaseModel):
 class IngestBody(BaseModel):
     workspace_id: str
     minio_key: str
+
+
+class LoginBody(BaseModel):
+    username: str = Field(..., min_length=1, description="Email or username")
+    password: str = Field(..., min_length=1)
+
+
+@router.post("/auth/login")
+async def auth_login(body: LoginBody) -> dict[str, Any]:
+    """Password login via Authentik flow executor + PKCE (no browser redirect to IdP)."""
+    try:
+        return await login_with_credentials(body.username.strip(), body.password)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e)) from e
+    except RuntimeError as e:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(e)) from e
+    except httpx.HTTPStatusError as e:
+        logger.warning("authentik login HTTP %s: %s", e.response.status_code, e.response.text[:500])
+        if e.response.status_code in (400, 401, 403, 404, 422):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid credentials",
+            ) from e
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Authentication service error",
+        ) from e
 
 
 @router.get("/health")

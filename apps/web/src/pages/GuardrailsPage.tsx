@@ -1,0 +1,160 @@
+import { type FormEvent, useCallback, useState } from "react";
+
+import { useAuth } from "../auth/AuthContext";
+import { listGuardrails, setGuardrailEnabled, type GuardrailPolicy } from "../lib/guardrailStorage";
+import {
+  NEMO_RAILS_CHANGED,
+  createNeMoRail,
+  deleteNeMoRail,
+  listNeMoRails,
+} from "../lib/nemoRailStorage";
+import type { NeMoPlacement } from "../lib/specTypes";
+import { useSyncedList } from "../lib/useSyncedList";
+
+export default function GuardrailsPage() {
+  const { user, realmRoles } = useAuth();
+  const username = user?.profile.preferred_username ?? user?.sub ?? "";
+  const isAdmin = realmRoles.has("admin") || realmRoles.has("platform-admin");
+  const [policies, setPolicies] = useState<GuardrailPolicy[]>(() => listGuardrails());
+  const rails = useSyncedList(NEMO_RAILS_CHANGED, listNeMoRails);
+
+  const [nName, setNName] = useState("");
+  const [nPlacement, setNPlacement] = useState<NeMoPlacement>("generic");
+  const [nRaw, setNRaw] = useState("# NeMo Colang / YAML (demo — not executed in browser)\n");
+
+  const toggle = useCallback((id: string, enabled: boolean) => {
+    setGuardrailEnabled(id, enabled);
+    setPolicies(listGuardrails());
+  }, []);
+
+  const onCreateRail = (e: FormEvent) => {
+    e.preventDefault();
+    if (!nName.trim()) return;
+    createNeMoRail({
+      name: nName.trim(),
+      rawConfig: nRaw,
+      placement: nPlacement,
+      createdBy: username,
+    });
+    setNName("");
+    setNRaw("# NeMo Colang / YAML (demo — not executed in browser)\n");
+    setNPlacement("generic");
+  };
+
+  return (
+    <div className="mx-auto max-w-4xl px-6 py-10">
+      <header className="border-b border-neutral-200 pb-6">
+        <h1 className="text-2xl font-semibold tracking-tight text-neutral-900">Guardrails</h1>
+        <p className="mt-1 text-sm text-neutral-600">
+          Quick policy toggles plus NeMo Guardrails config blobs for pipelines. Enforcement requires a future NeMo
+          runtime — this page only stores definitions locally.
+        </p>
+      </header>
+
+      <section className="mt-10">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-neutral-500">Workspace policies</h2>
+        <ul className="mt-4 space-y-3">
+          {policies.map((p) => (
+            <li
+              key={p.id}
+              className="flex items-start justify-between gap-4 rounded-lg border border-neutral-200 bg-white p-4 shadow-sm"
+            >
+              <div>
+                <h3 className="font-semibold text-neutral-900">{p.name}</h3>
+                <p className="mt-1 text-sm text-neutral-600">{p.description}</p>
+                <code className="mt-2 inline-block text-xs text-neutral-500">{p.id}</code>
+              </div>
+              <Toggle checked={p.enabled} onChange={(v) => toggle(p.id, v)} />
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <section className="mt-12 border-t border-neutral-200 pt-10">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-neutral-500">NeMo Guardrails configs</h2>
+        <p className="mt-1 text-sm text-neutral-600">
+          Attach these in workflow pipelines (before/after steps). Placement is a UX hint for LangGraph wiring later.
+        </p>
+
+        <form onSubmit={onCreateRail} className="mt-6 space-y-4 rounded-lg border border-neutral-200 bg-neutral-50/50 p-4">
+          <div>
+            <label className="block text-sm font-medium text-neutral-700">Name</label>
+            <input
+              value={nName}
+              onChange={(e) => setNName(e.target.value)}
+              className="mt-1 w-full max-w-md rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-neutral-700">Default placement hint</label>
+            <select
+              value={nPlacement}
+              onChange={(e) => setNPlacement(e.target.value as NeMoPlacement)}
+              className="mt-1 w-full max-w-md rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm"
+            >
+              <option value="generic">Generic</option>
+              <option value="before_model">Before model</option>
+              <option value="after_model">After model</option>
+              <option value="after_tool">After tool</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-neutral-700">Raw config (YAML / Colang)</label>
+            <textarea
+              value={nRaw}
+              onChange={(e) => setNRaw(e.target.value)}
+              rows={8}
+              className="mt-1 w-full font-mono text-xs"
+            />
+          </div>
+          <button type="submit" className="rounded-md bg-neutral-900 px-4 py-2 text-sm text-white">
+            Save NeMo config
+          </button>
+        </form>
+
+        <ul className="mt-6 space-y-2">
+          {rails.map((r) => (
+            <li key={r.id} className="flex flex-wrap items-start justify-between gap-2 rounded-lg border border-neutral-200 bg-white p-3 text-sm">
+              <div>
+                <span className="font-semibold">{r.name}</span>
+                <span className="ml-2 text-xs text-neutral-500">{r.placement}</span>
+                <p className="text-xs text-neutral-500">by {r.createdBy}</p>
+              </div>
+              {(isAdmin || r.createdBy === username) && (
+                <button
+                  type="button"
+                  className="text-xs text-red-700 underline"
+                  onClick={() => deleteNeMoRail(r.id, username, isAdmin)}
+                >
+                  Delete
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      </section>
+    </div>
+  );
+}
+
+function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      onClick={() => onChange(!checked)}
+      className={[
+        "relative h-7 w-12 shrink-0 rounded-full transition-colors",
+        checked ? "bg-neutral-900" : "bg-neutral-300",
+      ].join(" ")}
+    >
+      <span
+        className={[
+          "absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-transform",
+          checked ? "translate-x-5" : "translate-x-0.5",
+        ].join(" ")}
+      />
+    </button>
+  );
+}

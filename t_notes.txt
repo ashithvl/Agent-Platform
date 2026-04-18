@@ -1,0 +1,37 @@
+1. Authentik behind nginx (/authentik/)
+Updated infra/nginx/nginx.conf with:
+location /authentik/ → http://authentik-server:9000 (full URI preserved)
+WebSocket headers (Upgrade / Connection) and X-Forwarded-*
+Larger proxy buffers (common with Authentik)
+
+2. Authentik subpath + public URL
+In docker-compose.yml for authentik-server and authentik-worker:
+
+AUTHENTIK_WEB__PATH=/authentik/
+AUTHENTIK_HOST / AUTHENTIK_HOST_BROWSER default to http://localhost:8080/authentik/ (overridable via .env)
+AUTHENTIK_LISTEN__TRUSTED_PROXY_CIDRS set for Docker networks
+Removed host ports 9000:9000 and 9443:9443 on Authentik so the only browser entry on 8080 is nginx (Authentik is reached at http://localhost:8080/authentik/).
+
+3. Port clash: MinIO vs Authentik
+Both were using host 9000. MinIO is now:
+
+9002 → 9000 (S3 API)
+9003 → 9001 (console)
+Internal services still use minio:9000 (unchanged).
+
+4. OIDC URLs
+SPA default issuer: http://localhost:8080/authentik/application/o/web-spa/ — apps/web/src/auth/oidcSettings.ts
+api-service issuer for discovery (inside Docker): http://authentik-server:9000/authentik/application/o/web-spa/ — compose env
+
+5. Docs / UI
+README.md: table updated (8080 app, /authentik/, MinIO 9002/9003).
+apps/web/src/pages/Admin.tsx: link to http://localhost:8080/authentik/
+.env.example: AUTHENTIK_HOST / AUTHENTIK_HOST_BROWSER
+
+6. Compose
+nginx now depends_on: authentik-server so Authentik starts before the edge container.
+In Authentik UI, create/configure the OIDC provider with slug web-spa and set redirect URIs such as:
+
+http://localhost:8080/callback (production build behind nginx)
+http://localhost:5173/callback if you use Vite dev server
+Rebuild after changes: docker compose up --build -d.

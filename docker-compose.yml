@@ -1,5 +1,6 @@
 services:
   nginx:
+    container_name: e-ai-platform-nginx
     build:
       context: .
       dockerfile: infra/nginx/Dockerfile
@@ -8,10 +9,15 @@ services:
     depends_on:
       api-service:
         condition: service_started
+      authentik-server:
+        condition: service_started
+      litellm:
+        condition: service_started
     networks:
       - platform
 
   postgres-app:
+    container_name: e-ai-platform-postgres-app
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: platform
@@ -22,43 +28,84 @@ services:
     networks:
       - platform
 
-  postgres-keycloak:
+  postgres-authentik:
+    container_name: e-ai-platform-postgres-authentik
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: keycloak
-      POSTGRES_PASSWORD: keycloak
-      POSTGRES_DB: keycloak
+      POSTGRES_USER: authentik
+      POSTGRES_PASSWORD: authentik
+      POSTGRES_DB: authentik
     volumes:
-      - pg-keycloak-data:/var/lib/postgresql/data
+      - pg-authentik-data:/var/lib/postgresql/data
     networks:
       - platform
 
-  keycloak:
-    image: quay.io/keycloak/keycloak:24.0
-    command:
-      - start-dev
-      - --import-realm
-    environment:
-      KEYCLOAK_ADMIN: admin
-      KEYCLOAK_ADMIN_PASSWORD: admin
-      KC_DB: postgres
-      KC_DB_URL: jdbc:postgresql://postgres-keycloak:5432/keycloak
-      KC_DB_USERNAME: keycloak
-      KC_DB_PASSWORD: keycloak
-      KC_HEALTH_ENABLED: "true"
-      KC_HOSTNAME_STRICT: "false"
-      KC_HTTP_ENABLED: "true"
+  redis-authentik:
+    container_name: e-ai-platform-redis-authentik
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
     volumes:
-      - ./infra/keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json:ro
-    ports:
-      - "8090:8080"
+      - redis-authentik-data:/data
+    networks:
+      - platform
+
+  authentik-server:
+    container_name: e-ai-platform-authentik-server
+    image: ghcr.io/goauthentik/server:latest
+    command: server
+    environment:
+      AUTHENTIK_REDIS__HOST: redis-authentik
+      AUTHENTIK_POSTGRESQL__HOST: postgres-authentik
+      AUTHENTIK_POSTGRESQL__USER: authentik
+      AUTHENTIK_POSTGRESQL__NAME: authentik
+      AUTHENTIK_POSTGRESQL__PASSWORD: authentik
+      AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY:-change-me}
+      AUTHENTIK_ERROR_REPORTING__ENABLED: "false"
+      AUTHENTIK_BOOTSTRAP_EMAIL: ${AUTHENTIK_BOOTSTRAP_EMAIL:-admin@example.com}
+      AUTHENTIK_BOOTSTRAP_PASSWORD: ${AUTHENTIK_BOOTSTRAP_PASSWORD:-admin}
+      AUTHENTIK_BOOTSTRAP_TOKEN: ${AUTHENTIK_BOOTSTRAP_TOKEN:-bootstrap-token}
+      # Public URL (via nginx on :8080). Trailing slash recommended for recent Authentik.
+      AUTHENTIK_HOST: ${AUTHENTIK_HOST:-http://localhost:8080/authentik/}
+      AUTHENTIK_HOST_BROWSER: ${AUTHENTIK_HOST_BROWSER:-http://localhost:8080/authentik/}
+      AUTHENTIK_WEB__PATH: /authentik/
+      AUTHENTIK_LISTEN__TRUSTED_PROXY_CIDRS: 172.16.0.0/12 10.0.0.0/8
     depends_on:
-      postgres-keycloak:
+      postgres-authentik:
+        condition: service_started
+      redis-authentik:
+        condition: service_started
+    networks:
+      - platform
+
+  authentik-worker:
+    container_name: e-ai-platform-authentik-worker
+    image: ghcr.io/goauthentik/server:latest
+    command: worker
+    environment:
+      AUTHENTIK_REDIS__HOST: redis-authentik
+      AUTHENTIK_POSTGRESQL__HOST: postgres-authentik
+      AUTHENTIK_POSTGRESQL__USER: authentik
+      AUTHENTIK_POSTGRESQL__NAME: authentik
+      AUTHENTIK_POSTGRESQL__PASSWORD: authentik
+      AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY:-change-me}
+      AUTHENTIK_ERROR_REPORTING__ENABLED: "false"
+      # Required on the worker for automated install (bootstrap runs here); see Authentik docs.
+      AUTHENTIK_BOOTSTRAP_EMAIL: ${AUTHENTIK_BOOTSTRAP_EMAIL:-admin@example.com}
+      AUTHENTIK_BOOTSTRAP_PASSWORD: ${AUTHENTIK_BOOTSTRAP_PASSWORD:-admin}
+      AUTHENTIK_BOOTSTRAP_TOKEN: ${AUTHENTIK_BOOTSTRAP_TOKEN:-bootstrap-token}
+      AUTHENTIK_HOST: ${AUTHENTIK_HOST:-http://localhost:8080/authentik/}
+      AUTHENTIK_HOST_BROWSER: ${AUTHENTIK_HOST_BROWSER:-http://localhost:8080/authentik/}
+      AUTHENTIK_WEB__PATH: /authentik/
+    depends_on:
+      postgres-authentik:
+        condition: service_started
+      redis-authentik:
         condition: service_started
     networks:
       - platform
 
   redis:
+    container_name: e-ai-platform-redis
     image: redis:7-alpine
     command: redis-server --appendonly yes
     volumes:
@@ -67,6 +114,7 @@ services:
       - platform
 
   minio:
+    container_name: e-ai-platform-minio
     image: minio/minio:latest
     command: server /data --console-address ":9001"
     environment:
@@ -75,13 +123,16 @@ services:
     volumes:
       - minio-data:/data
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "9002:9000"
+      - "9003:9001"
     networks:
       - platform
 
   litellm:
+    container_name: e-ai-platform-litellm
     image: ghcr.io/berriai/litellm:main-latest
+    ports:
+      - "4000:4000"
     environment:
       LITELLM_MASTER_KEY: sk-litellm-master-key
       STORE_MODEL_IN_DB: "false"
@@ -93,6 +144,7 @@ services:
       - platform
 
   agent-service:
+    container_name: e-ai-platform-agent-service
     build:
       context: ./services/agent-service
       dockerfile: Dockerfile
@@ -106,6 +158,7 @@ services:
       - platform
 
   execution-service:
+    container_name: e-ai-platform-execution-service
     build:
       context: ./services/execution-service
       dockerfile: Dockerfile
@@ -128,6 +181,7 @@ services:
       - platform
 
   knowledge-service:
+    container_name: e-ai-platform-knowledge-service
     build:
       context: ./services/knowledge-service
       dockerfile: Dockerfile
@@ -149,6 +203,7 @@ services:
       - platform
 
   worker-service:
+    container_name: e-ai-platform-worker-service
     build:
       context: ./services/worker-service
       dockerfile: Dockerfile
@@ -175,20 +230,23 @@ services:
       - platform
 
   api-service:
+    container_name: e-ai-platform-api-service
     build:
       context: ./services/api-service
       dockerfile: Dockerfile
     environment:
-      KEYCLOAK_URL: http://keycloak:8080
-      KEYCLOAK_REALM: platform
-      KEYCLOAK_CLIENT_ID: web-spa
+      OIDC_ISSUER_URL: http://authentik-server:9000/authentik/application/o/web-spa/
+      OIDC_CLIENT_ID: web-spa
+      # BFF password login: API calls Authentik internally; redirect_uri is only for OAuth code (not shown to users).
+      AUTHENTIK_INTERNAL_BASE: http://authentik-server:9000/authentik
+      OIDC_REDIRECT_URI: ${OIDC_REDIRECT_URI:-http://localhost:8080/callback}
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-dev-internal-token}
       AGENT_SERVICE_URL: http://agent-service:8001
       EXECUTION_SERVICE_URL: http://execution-service:8002
       KNOWLEDGE_SERVICE_URL: http://knowledge-service:8003
       REDIS_URL: redis://redis:6379/1
     depends_on:
-      keycloak:
+      authentik-server:
         condition: service_started
       agent-service:
         condition: service_started
@@ -207,7 +265,8 @@ networks:
 
 volumes:
   pg-app-data:
-  pg-keycloak-data:
+  pg-authentik-data:
   redis-data:
+  redis-authentik-data:
   minio-data:
   lancedb-data:

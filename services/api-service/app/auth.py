@@ -60,7 +60,7 @@ def decode_token(token: str) -> dict[str, Any]:
 
 
 def realm_roles(payload: dict[str, Any]) -> set[str]:
-    # Keycloak-style roles.
+    # Provider-specific role/group extraction.
     ra = payload.get("realm_access") or {}
     roles = ra.get("roles") or []
     out = set(roles)

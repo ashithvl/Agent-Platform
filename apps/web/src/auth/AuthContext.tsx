@@ -1,19 +1,47 @@
-import { User, UserManager } from "oidc-client-ts";
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 
-import { buildOidcSettings } from "./oidcSettings";
-import { realmRolesFromUser } from "./roles";
+import { loginLocal } from "./localUsers";
+import { realmRolesFromAccessToken } from "./roles";
 
-function buildUserManager(): UserManager {
-  return new UserManager(buildOidcSettings());
+const STORAGE_KEY = "eai_access_token";
+
+export type AuthUser = {
+  sub: string;
+  access_token: string;
+  profile: { preferred_username?: string; name?: string };
+};
+
+function decodeJwtPayload(accessToken: string): Record<string, unknown> | null {
+  try {
+    const part = accessToken.split(".")[1];
+    const b64 = part.replace(/-/g, "+").replace(/_/g, "/");
+    const pad = b64.length % 4 === 0 ? "" : "=".repeat(4 - (b64.length % 4));
+    return JSON.parse(atob(b64 + pad)) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+function userFromAccessToken(accessToken: string): AuthUser | null {
+  const p = decodeJwtPayload(accessToken);
+  if (!p?.sub) return null;
+  const sub = String(p.sub);
+  return {
+    sub,
+    access_token: accessToken,
+    profile: {
+      preferred_username: (p.preferred_username as string | undefined) ?? (p.email as string | undefined),
+      name: p.name as string | undefined,
+    },
+  };
 }
 
 type AuthState = {
-  user: User | null;
+  user: AuthUser | null;
   loading: boolean;
   error: string | null;
-  login: () => Promise<void>;
-  logout: () => Promise<void>;
+  login: (username: string, password: string) => Promise<void>;
+  logout: () => void;
   getAccessToken: () => string | null;
   realmRoles: Set<string>;
 };
@@ -21,40 +49,41 @@ type AuthState = {
 const AuthContext = createContext<AuthState | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const userManager = useMemo(() => buildUserManager(), []);
 
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const u = await userManager.getUser();
-        if (!cancelled) setUser(u);
-      } catch (e) {
-        if (!cancelled) setError(String(e));
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [userManager]);
+    const t = sessionStorage.getItem(STORAGE_KEY);
+    if (t) {
+      const u = userFromAccessToken(t);
+      if (u) setUser(u);
+      else sessionStorage.removeItem(STORAGE_KEY);
+    }
+    setLoading(false);
+  }, []);
 
-  const login = useCallback(async () => {
+  const login = useCallback(async (username: string, password: string) => {
     setError(null);
-    await userManager.signinRedirect();
-  }, [userManager]);
+    const at = loginLocal(username, password);
+    sessionStorage.setItem(STORAGE_KEY, at);
+    const u = userFromAccessToken(at);
+    if (!u) {
+      sessionStorage.removeItem(STORAGE_KEY);
+      throw new Error("Invalid session.");
+    }
+    setUser(u);
+  }, []);
 
-  const logout = useCallback(async () => {
-    await userManager.signoutRedirect();
-  }, [userManager]);
+  const logout = useCallback(() => {
+    sessionStorage.removeItem(STORAGE_KEY);
+    setUser(null);
+    window.location.replace(`${window.location.origin}/login`);
+  }, []);
 
   const getAccessToken = useCallback(() => user?.access_token ?? null, [user]);
 
-  const realmRoles = useMemo(() => realmRolesFromUser(user), [user]);
+  const realmRoles = useMemo(() => realmRolesFromAccessToken(user?.access_token ?? null), [user]);
 
   const value = useMemo(
     () => ({

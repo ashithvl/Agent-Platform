@@ -1,6 +1,6 @@
 # Enterprise AI Platform (Compose MVP)
 
-Internal AI lab stack: **nginx** (edge), **Keycloak** (OIDC/RBAC), **FastAPI** services (`api-service`, `agent-service`, `execution-service`, `knowledge-service`), **Redis** queue + **worker-service**, **LiteLLM**, **Postgres**, **MinIO**, **LanceDB** (volume), and a **single Vite + React SPA** with route-level RBAC.
+Internal AI lab stack: **nginx** (edge), **Authentik** (OIDC/RBAC), **FastAPI** services (`api-service`, `agent-service`, `execution-service`, `knowledge-service`), **Redis** queue + **worker-service**, **LiteLLM**, **Postgres**, **MinIO**, **LanceDB** (volume), and a **single Vite + React SPA** with route-level RBAC.
 
 ## Prerequisites
 
@@ -15,27 +15,45 @@ cp .env.example .env
 docker compose up --build
 ```
 
+**Important:** The SPA is **baked into the `nginx` image** at build time. If you only run `docker compose up` (without `--build`), Docker often **reuses an old nginx image** and you will still see an **older UI** (e.g. the same login screen). After pulling code or changing `apps/web`, always rebuild the edge image:
+
+```bash
+docker compose build --no-cache nginx && docker compose up
+```
+
+Then do a **hard refresh** in the browser (e.g. Cmd+Shift+R) so `index.html` is not served from cache.
+
 Open:
 
 | URL | Purpose |
 |-----|---------|
-| http://localhost:8080 | Web UI (via nginx) + `/api/v1` BFF |
-| http://localhost:8090 | Keycloak (admin console: `admin` / `admin`) |
+| http://localhost:8080 | **React SPA** — start here for Chat / Studio / Admin; sign-in is username/password in the app (the API talks to Authentik server-side; users never see the IdP) |
+| http://localhost:8080/login | Same login entry as home (bookmark-friendly) |
+| http://localhost:8080/authentik/ | Authentik admin UI and IdP pages (provider setup, not the app shell) |
+| http://localhost:4000 | **LiteLLM** (host port; SPA model lists via `/litellm` when using nginx on 8080, or Vite proxy in dev) |
+| http://localhost:9002 | MinIO S3 API (host port; internal services use `minio:9000`) |
+| http://localhost:9003 | MinIO console |
 
-### Test users (realm `platform`)
+### Authentik bootstrap credentials
 
-| Username | Password | Roles |
-|----------|----------|-------|
-| `consumer` | `consumer` | consumer |
-| `builder` | `builder` | consumer, builder |
-| `admin` | `admin` | consumer, builder, admin, platform-admin |
+| Field | Value |
+|-------|-------|
+| email | `${AUTHENTIK_BOOTSTRAP_EMAIL}` (default `admin@example.com`) |
+| password | `${AUTHENTIK_BOOTSTRAP_PASSWORD}` (default `admin`) |
 
-After login, use **Chat** (all users), **Studio** (builder+), **Admin** (admin+). SPA reads **realm roles** from the **access token** JWT for client-side gating; **api-service** enforces the same roles on mutating routes.
+After the stack is up, bootstrap the OIDC app (public client id and application slug **`web-spa`**) and RBAC groups using the same token as in `.env`:
+
+```bash
+set -a && source .env && set +a
+python3 infra/authentik/bootstrap_web_spa.py
+```
+
+This creates the provider if missing, adds groups `consumer`, `builder`, `admin`, and `platform-admin`, and assigns them to `akadmin` together with `authentik Admins`. Access tokens include `realm_access.roles` and `groups` derived from Authentik group names (see SPA/API RBAC). Then open **http://localhost:8080** and use **Sign in** (same credentials as your Authentik user). Routes: **Chat** (consumer+), **Studio** (builder+), **Admin** (admin+).
 
 ## Request flow (chat)
 
 ```text
-Browser -> nginx:8080/api/... -> api-service (JWT/JWKS from Keycloak)
+Browser -> nginx:8080/api/... -> api-service (JWT/JWKS from Authentik OIDC discovery)
        -> execution-service -> agent-service (published runtime config)
        -> LiteLLM -> (optional) Langfuse trace (background thread)
 ```
@@ -52,8 +70,8 @@ The worker uses a **Redis list** (`ingest_queue`) for MVP simplicity. **TaskIQ**
 
 ## Services (containers)
 
-1. `nginx` — static SPA + reverse proxy to `api-service`
-2. `keycloak` + `postgres-keycloak`
+1. `nginx` — static SPA + reverse proxy to `api-service`, **LiteLLM** at `/litellm/` (same-origin for SPA model lists), and **Authentik** at `/authentik/`
+2. `authentik-server` + `authentik-worker` + `postgres-authentik` + `redis-authentik`
 3. `postgres-app` — platform metadata (agents, versions, publish pointers, ingest jobs, audit)
 4. `redis`
 5. `minio`
@@ -84,7 +102,18 @@ npm install
 npm run dev
 ```
 
-Vite proxies `/api` to `http://localhost:8000`. Run `api-service` (and dependencies) via Compose or locally with matching env vars. Keycloak redirect URIs must include `http://localhost:5173/callback` if you test OIDC against local Vite—add that redirect URI to the `web-spa` client in Keycloak.
+Vite proxies `/api` to `http://localhost:8000`. Run `api-service` (and dependencies) via Compose or locally with matching env vars (`OIDC_*` and `AUTHENTIK_INTERNAL_BASE` as in `docker-compose.yml`). The SPA calls `POST /api/v1/auth/login`; optionally set `VITE_API_BASE` if your API is not under `/api/v1` behind the dev proxy.
+
+Vite also proxies `/litellm` to `http://localhost:4000` when LiteLLM is published (Compose maps **4000:4000**). Through nginx at **http://localhost:8080**, the SPA uses **`/litellm/`** as the same-origin base for **`GET /litellm/v1/models`**.
+
+### SPA: LiteLLM model dropdown (demo)
+
+The Agents / RAG UI can list models from LiteLLM’s OpenAI-compatible API. Set in **`apps/web/.env`** (or Docker build args for the nginx-baked SPA):
+
+- **`VITE_LITELLM_BASE`** — default `/litellm` (behind nginx) or `http://localhost:4000` for raw LiteLLM in dev.
+- **`VITE_LITELLM_API_KEY`** — must match **`LITELLM_MASTER_KEY`** (default `sk-litellm-master-key`). **This exposes the master key to the browser — demo only;** use a BFF or server-side proxy in production.
+
+**Logout:** The SPA clears the stored access token and returns to `/login`. No redirect to Authentik in the browser.
 
 ## API examples (with token)
 
@@ -99,7 +128,7 @@ curl -sS -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/v1/workspac
 
 - Service-to-service calls use `X-Internal-Token` (set via `INTERNAL_SERVICE_TOKEN`).
 - Replace with mTLS or workload identity for production.
-- JWT `aud` verification is relaxed (`verify_aud: false`) for Keycloak compatibility; tighten when client audience is stable.
+- JWT `aud` verification is relaxed (`verify_aud: false`) for provider compatibility; tighten when client audience is stable.
 
 ## Known limitations / Phase 2
 
