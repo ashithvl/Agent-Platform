@@ -1,5 +1,8 @@
-/** Global tool (MCP-style metadata; execution not in browser). */
-export type ToolKind = "mcp" | "http" | "simple";
+/** Global tool registry — only MCP is supported for new registrations. */
+export type ToolKind = "mcp";
+
+/** Remote MCP transport (stdio / IO omitted in this UI). */
+export type McpTransport = "sse" | "http";
 
 export type Tool = {
   id: string;
@@ -8,12 +11,20 @@ export type Tool = {
   description: string;
   createdBy: string;
   createdAt: number;
-  serverUrl?: string;
-  transport?: string;
+  /** How the MCP client reaches the server (SSE or HTTP). */
+  mcpTransport: McpTransport;
+  /**
+   * Full MCP server connection config as JSON (e.g. `url`, `capabilities`, auth blocks).
+   * Must be a JSON object when saved from the UI.
+   */
+  mcpConfigJson: string;
+  /** Optional HTTP headers merged by the runtime (not executed in this demo app). */
   headersJson?: string;
+  /** @deprecated Migrated into `mcpConfigJson` on read — may still exist in old localStorage. */
+  serverUrl?: string;
+  /** @deprecated Free text — use `mcpTransport` + `mcpConfigJson`. */
+  transport?: string;
 };
-
-export type ContextStrategy = "passthrough" | "templated" | "from_previous_step";
 
 /** LangChain-oriented agent definition (config only). */
 export type AgentSpec = {
@@ -21,8 +32,8 @@ export type AgentSpec = {
   name: string;
   model: string;
   systemPrompt: string;
-  contextStrategy: ContextStrategy;
-  contextNotes: string;
+  /** Runtime context slot names callers fill (e.g. user_id, rag_snippets). */
+  contextVariableNames: string[];
   toolIds: string[];
   status: "active" | "paused";
   createdBy: string;

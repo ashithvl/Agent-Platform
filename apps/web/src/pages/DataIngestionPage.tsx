@@ -1,8 +1,12 @@
-import { type FormEvent, useId, useMemo, useState } from "react";
+import { type FormEvent, useEffect, useId, useMemo, useState } from "react";
 
 import { useAuth } from "../auth/AuthContext";
 import { useFlash } from "../components/FlashContext";
+import { EmptyState } from "../components/EmptyState";
+import { EmptyTablePlaceholder } from "../components/EmptyTablePlaceholder";
 import { PageChrome } from "../components/PageChrome";
+import { TablePagination } from "../components/TablePagination";
+import { usePagination } from "../hooks/usePagination";
 import { filterEmbeddingLike, filterRerankLike } from "../lib/liteLLMModels";
 import {
   KNOWLEDGE_CHANGED,
@@ -24,6 +28,7 @@ export default function DataIngestionPage() {
   const embedOptions = useMemo(() => filterEmbeddingLike(models), [models]);
   const rerankOptions = useMemo(() => filterRerankLike(models), [models]);
   const profiles = useSyncedList(RAG_PROFILES_CHANGED, listRagProfiles);
+  const profilesPage = usePagination(profiles, 10);
   const knowledgeItems = useSyncedList(KNOWLEDGE_CHANGED, listKnowledgeSorted);
 
   const [name, setName] = useState("");
@@ -42,6 +47,18 @@ export default function DataIngestionPage() {
   const [useReranker, setUseReranker] = useState(false);
   const [rerankModel, setRerankModel] = useState("");
   const [formErr, setFormErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (embedOptions.length && !embeddingModel) {
+      setEmbeddingModel(embedOptions[0].id);
+    }
+  }, [embedOptions, embeddingModel]);
+
+  useEffect(() => {
+    if (rerankOptions.length && !rerankModel) {
+      setRerankModel(rerankOptions[0].id);
+    }
+  }, [rerankOptions, rerankModel]);
 
   const resetForm = () => {
     setName("");
@@ -137,7 +154,7 @@ export default function DataIngestionPage() {
                 id={`${formId}-embed`}
                 value={embeddingModel || embedOptions[0]?.id || ""}
                 onChange={(e) => setEmbeddingModel(e.target.value)}
-                disabled={modelsLoading}
+                disabled={embedOptions.length === 0}
                 className="mt-1 w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm"
               >
                 {embedOptions.map((m) => (
@@ -164,21 +181,33 @@ export default function DataIngestionPage() {
           <fieldset className="rounded-md border border-neutral-200 bg-white p-3">
             <legend className="text-sm font-medium text-neutral-800">Knowledge sources</legend>
             <p className="text-xs text-neutral-500">Leave none selected to mean “all hubs” in this demo.</p>
-            <ul className="mt-2 max-h-36 space-y-1 overflow-y-auto text-sm">
-              {knowledgeItems.map((k: KnowledgeItem) => (
-                <li key={k.id}>
-                  <label htmlFor={`${formId}-ks-${k.id}`} className="flex cursor-pointer items-center gap-2">
-                    <input
-                      id={`${formId}-ks-${k.id}`}
-                      type="checkbox"
-                      checked={knowledgeItemIds.includes(k.id)}
-                      onChange={() => toggleKnowledge(k.id)}
-                    />
-                    {k.title}
-                  </label>
-                </li>
-              ))}
-            </ul>
+            <div className="mt-2 max-h-48 overflow-y-auto rounded-md border border-neutral-100 bg-neutral-50/50">
+              {knowledgeItems.length === 0 ? (
+                <EmptyState
+                  compact
+                  visual="folder"
+                  title="No knowledge hubs yet"
+                  description="Add items under Knowledge hub first, then return here to scope this profile to specific hubs—or leave none checked for “all hubs” in this demo."
+                  className="max-w-none px-2"
+                />
+              ) : (
+                <ul className="space-y-1 p-2 text-sm">
+                  {knowledgeItems.map((k: KnowledgeItem) => (
+                    <li key={k.id}>
+                      <label htmlFor={`${formId}-ks-${k.id}`} className="flex cursor-pointer items-center gap-2">
+                        <input
+                          id={`${formId}-ks-${k.id}`}
+                          type="checkbox"
+                          checked={knowledgeItemIds.includes(k.id)}
+                          onChange={() => toggleKnowledge(k.id)}
+                        />
+                        {k.title}
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           </fieldset>
 
           <div className="grid gap-4 sm:grid-cols-3">
@@ -340,34 +369,64 @@ export default function DataIngestionPage() {
 
       <section className="mt-10">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-neutral-500">Saved profiles</h2>
-        <ul className="mt-4 space-y-2">
-          {profiles.map((p) => (
-            <li key={p.id} className="rounded-lg border border-neutral-200 bg-white p-4 text-sm shadow-sm">
-              <div className="flex flex-wrap items-start justify-between gap-2">
-                <div>
-                  <span className="font-semibold text-neutral-900">{p.name}</span>
-                  <p className="text-xs text-neutral-600">{p.description}</p>
-                  <p className="mt-1 text-xs text-neutral-500">
-                    Embed: {p.embeddingModel} · chunk {p.chunkSize}/{p.chunkOverlap} · {p.splitter} · hybrid{" "}
-                    {p.retrievalHybrid ? `α=${p.hybridAlpha}` : "off"}
-                  </p>
-                </div>
-                {(isAdmin || p.createdBy === username) && (
-                  <button
-                    type="button"
-                    className="text-xs text-red-700 underline"
-                    onClick={() => {
-                      deleteRagProfile(p.id, username, isAdmin);
-                      showSuccess("RAG profile removed.");
-                    }}
-                  >
-                    Delete
-                  </button>
-                )}
-              </div>
-            </li>
-          ))}
-        </ul>
+        <div className="mt-4 overflow-hidden rounded-lg border border-neutral-200">
+          <table className="w-full text-left text-sm">
+            <thead className="bg-neutral-50 text-xs font-semibold uppercase tracking-wide text-neutral-500">
+              <tr>
+                <th className="px-4 py-3">Name</th>
+                <th className="px-4 py-3">Description</th>
+                <th className="px-4 py-3">Embedding &amp; chunking</th>
+                <th className="w-24 px-4 py-3" />
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-neutral-200 bg-white">
+              {profiles.length === 0 ? (
+                <EmptyTablePlaceholder
+                  colSpan={4}
+                  visual="folder"
+                  title="No RAG profiles yet"
+                  description="Save a profile from the form above — configs stay in this browser for demo pipelines."
+                />
+              ) : (
+                profilesPage.pageItems.map((p) => (
+                  <tr key={p.id} className="align-top hover:bg-neutral-50/80">
+                    <td className="px-4 py-3 font-medium text-neutral-900">{p.name}</td>
+                    <td className="max-w-xs px-4 py-3 text-xs text-neutral-600">{p.description || "—"}</td>
+                    <td className="px-4 py-3 text-xs text-neutral-600">
+                      {p.embeddingModel} · {p.chunkSize}/{p.chunkOverlap} · {p.splitter}
+                      {p.retrievalHybrid ? ` · hybrid α=${p.hybridAlpha}` : ""}
+                    </td>
+                    <td className="px-4 py-3 text-xs">
+                      {(isAdmin || p.createdBy === username) ? (
+                        <button
+                          type="button"
+                          className="text-red-700 underline"
+                          onClick={() => {
+                            deleteRagProfile(p.id, username, isAdmin);
+                            showSuccess("RAG profile removed.");
+                          }}
+                        >
+                          Delete
+                        </button>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+          <TablePagination
+            label="RAG profiles"
+            page={profilesPage.page}
+            totalPages={profilesPage.totalPages}
+            total={profilesPage.total}
+            from={profilesPage.from}
+            to={profilesPage.to}
+            onPageChange={profilesPage.setPage}
+          />
+        </div>
       </section>
     </PageChrome>
   );

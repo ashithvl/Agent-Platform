@@ -14,14 +14,14 @@ export type StoredUser = {
 
 export type CreatableRole = "user" | "developer" | "admin";
 
-/** Same workspace features as developers except API keys / API access nav (see `api_access`). */
+/** API access (`api_access`) is admin-only in this demo. End users and developers use the workspace without API keys. */
 const ROLE_SET: Record<CreatableRole, string[]> = {
   user: ["consumer", "builder"],
-  developer: ["consumer", "builder", "api_access"],
+  developer: ["consumer", "builder"],
   admin: ["platform-admin", "admin", "consumer", "builder", "api_access"],
 };
 
-/** Seeded accounts: admin (full), developer (workspace + API keys), user (workspace, no API keys). */
+/** Canonical demo accounts — always three: admin, developer, user (see `ensureCanonicalSeeds`). */
 const SEED: StoredUser[] = [
   { username: "admin", password: "admin", roles: [...ROLE_SET.admin] },
   { username: "developer", password: "developer", roles: [...ROLE_SET.developer] },
@@ -37,10 +37,15 @@ function migrateLegacyRoles(users: StoredUser[]): StoredUser[] {
       changed = true;
       return { ...u, roles: [...ROLE_SET.user] };
     }
-    // Old seed: developer without api_access
-    if (name === "developer" && u.roles.includes("builder") && !u.roles.includes("api_access")) {
-      changed = true;
-      return { ...u, roles: [...ROLE_SET.developer] };
+    // Developer must match current template (no api_access)
+    if (name === "developer") {
+      const want = [...ROLE_SET.developer];
+      const same =
+        u.roles.length === want.length && want.every((r) => u.roles.includes(r)) && u.roles.every((r) => want.includes(r));
+      if (!same) {
+        changed = true;
+        return { ...u, roles: want };
+      }
     }
     // Old admin role set without api_access / builder
     if (name === "admin" && (u.roles.includes("admin") || u.roles.includes("platform-admin"))) {
@@ -61,6 +66,34 @@ function migrateLegacyRoles(users: StoredUser[]): StoredUser[] {
   return next;
 }
 
+/** Ensures admin, developer, and user accounts exist with canonical roles (demo invariant). */
+function ensureCanonicalSeeds(users: StoredUser[]): { users: StoredUser[]; changed: boolean } {
+  const map = new Map<string, StoredUser>();
+  for (const u of users) {
+    map.set(u.username.toLowerCase(), u);
+  }
+  let changed = false;
+  for (const seed of SEED) {
+    const key = seed.username.toLowerCase();
+    const existing = map.get(key);
+    if (!existing) {
+      map.set(key, { ...seed });
+      changed = true;
+      continue;
+    }
+    const want = seed.roles;
+    const same =
+      existing.roles.length === want.length &&
+      want.every((r) => existing.roles.includes(r)) &&
+      existing.roles.every((r) => want.includes(r));
+    if (!same) {
+      map.set(key, { ...existing, roles: [...want] });
+      changed = true;
+    }
+  }
+  return { users: Array.from(map.values()), changed };
+}
+
 function loadUsers(): StoredUser[] {
   try {
     const raw = localStorage.getItem(USERS_KEY);
@@ -73,7 +106,12 @@ function loadUsers(): StoredUser[] {
       localStorage.setItem(USERS_KEY, JSON.stringify(SEED));
       return [...SEED];
     }
-    return migrateLegacyRoles(parsed);
+    const migrated = migrateLegacyRoles(parsed);
+    const { users: merged, changed: seedChanged } = ensureCanonicalSeeds(migrated);
+    if (seedChanged) {
+      saveUsers(merged);
+    }
+    return merged;
   } catch {
     localStorage.setItem(USERS_KEY, JSON.stringify(SEED));
     return [...SEED];
@@ -115,13 +153,14 @@ export function listUsersPublic(): { username: string; roles: string[]; label: s
   return loadUsers().map((x) => ({
     username: x.username,
     roles: x.roles,
-    label: roleLabel(x.roles),
+    label: roleLabel(x.username, x.roles),
   }));
 }
 
-export function roleLabel(roles: string[]): string {
+/** Display label; developer vs end-user share the same realm roles, so we use the canonical username. */
+export function roleLabel(username: string, roles: string[]): string {
   if (roles.includes("platform-admin") || roles.includes("admin")) return "Admin";
-  if (roles.includes("api_access")) return "Developer";
+  if (username.toLowerCase() === "developer") return "Developer";
   return "User";
 }
 

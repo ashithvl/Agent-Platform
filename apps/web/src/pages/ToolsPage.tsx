@@ -2,10 +2,46 @@ import { type FormEvent, useId, useState } from "react";
 
 import { useAuth } from "../auth/AuthContext";
 import { Dialog } from "../components/Dialog";
+import { EmptyTablePlaceholder } from "../components/EmptyTablePlaceholder";
 import { useFlash } from "../components/FlashContext";
 import { PageChrome } from "../components/PageChrome";
-import { TOOLS_CHANGED, createTool, deleteTool, listTools, type ToolKind } from "../lib/toolStorage";
+import { TablePagination } from "../components/TablePagination";
+import { usePagination } from "../hooks/usePagination";
+import type { McpTransport } from "../lib/specTypes";
+import { TOOLS_CHANGED, createTool, deleteTool, listTools } from "../lib/toolStorage";
 import { useSyncedList } from "../lib/useSyncedList";
+
+const DEFAULT_MCP_CONFIG = `{
+  "url": "https://example.com/mcp"
+}`;
+
+function parseMcpConfigJson(raw: string): { ok: true; value: string } | { ok: false; message: string } {
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return { ok: false, message: "MCP configuration (JSON) is required." };
+  }
+  try {
+    const parsed: unknown = JSON.parse(trimmed);
+    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return { ok: false, message: "MCP configuration must be a JSON object (not an array or primitive)." };
+    }
+    return { ok: true, value: JSON.stringify(parsed, null, 2) };
+  } catch {
+    return { ok: false, message: "MCP configuration must be valid JSON." };
+  }
+}
+
+function toolDetailsPreview(t: { description: string; mcpConfigJson: string }): string {
+  if (t.description.trim()) return t.description;
+  try {
+    const o = JSON.parse(t.mcpConfigJson) as Record<string, unknown>;
+    const u = o.url ?? o.endpoint ?? o.serverUrl;
+    if (typeof u === "string" && u) return u;
+  } catch {
+    /* ignore */
+  }
+  return t.mcpConfigJson.slice(0, 80) + (t.mcpConfigJson.length > 80 ? "…" : "");
+}
 
 export default function ToolsPage() {
   const { user, realmRoles } = useAuth();
@@ -14,23 +50,22 @@ export default function ToolsPage() {
   const username = user?.profile.preferred_username ?? user?.sub ?? "";
   const isAdmin = realmRoles.has("admin") || realmRoles.has("platform-admin");
   const tools = useSyncedList(TOOLS_CHANGED, listTools);
+  const toolsPage = usePagination(tools, 10);
 
   const [name, setName] = useState("");
   const [formErr, setFormErr] = useState<string | null>(null);
-  const [kind, setKind] = useState<ToolKind>("mcp");
   const [description, setDescription] = useState("");
-  const [serverUrl, setServerUrl] = useState("");
-  const [transport, setTransport] = useState("stdio");
+  const [mcpTransport, setMcpTransport] = useState<McpTransport>("sse");
+  const [mcpConfigJson, setMcpConfigJson] = useState(DEFAULT_MCP_CONFIG);
   const [headersJson, setHeadersJson] = useState("");
   const [registerOpen, setRegisterOpen] = useState(false);
 
   const resetForm = () => {
     setName("");
     setDescription("");
-    setServerUrl("");
+    setMcpTransport("sse");
+    setMcpConfigJson(DEFAULT_MCP_CONFIG);
     setHeadersJson("");
-    setKind("mcp");
-    setTransport("stdio");
     setFormErr(null);
   };
 
@@ -45,28 +80,38 @@ export default function ToolsPage() {
       setFormErr("Name is required.");
       return;
     }
+    const cfg = parseMcpConfigJson(mcpConfigJson);
+    if (!cfg.ok) {
+      setFormErr(cfg.message);
+      return;
+    }
+    if (headersJson.trim()) {
+      try {
+        JSON.parse(headersJson);
+      } catch {
+        setFormErr("Headers must be valid JSON.");
+        return;
+      }
+    }
     setFormErr(null);
     createTool({
       name: name.trim(),
-      kind,
+      kind: "mcp",
       description: description.trim(),
       createdBy: username,
-      serverUrl: kind === "mcp" ? serverUrl.trim() : undefined,
-      transport: kind === "mcp" ? transport : undefined,
+      mcpTransport,
+      mcpConfigJson: cfg.value,
       headersJson: headersJson.trim() || undefined,
     });
-    setName("");
-    setDescription("");
-    setServerUrl("");
-    setHeadersJson("");
     showSuccess("Tool saved.");
     setRegisterOpen(false);
+    resetForm();
   };
 
   return (
     <PageChrome
       title="Tools"
-      description="Global tool registry (MCP-style metadata). Stored in the browser only — no remote tool execution."
+      description="Register MCP server metadata for agents (SSE or HTTP transport). Stored in this browser only — no remote execution."
       actions={
         <button
           type="button"
@@ -77,8 +122,8 @@ export default function ToolsPage() {
         </button>
       }
     >
-      <Dialog open={registerOpen} onClose={closeRegister} title="Register tool" size="lg">
-        <form onSubmit={onCreate} className="max-w-xl space-y-3">
+      <Dialog open={registerOpen} onClose={closeRegister} title="Register MCP tool" size="lg">
+        <form onSubmit={onCreate} className="max-w-xl space-y-4">
           {formErr ? (
             <p className="text-sm text-red-600" role="alert">
               {formErr}
@@ -99,21 +144,6 @@ export default function ToolsPage() {
             />
           </div>
           <div>
-            <label htmlFor={`${formId}-kind`} className="block text-sm font-medium text-neutral-700">
-              Kind
-            </label>
-            <select
-              id={`${formId}-kind`}
-              value={kind}
-              onChange={(e) => setKind(e.target.value as ToolKind)}
-              className="mt-1 w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm"
-            >
-              <option value="mcp">MCP</option>
-              <option value="http">HTTP</option>
-              <option value="simple">Simple</option>
-            </select>
-          </div>
-          <div>
             <label htmlFor={`${formId}-description`} className="block text-sm font-medium text-neutral-700">
               Description
             </label>
@@ -125,52 +155,62 @@ export default function ToolsPage() {
               className="mt-1 w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm"
             />
           </div>
-          {kind === "mcp" ? (
-            <>
-              <div>
-                <label htmlFor={`${formId}-server-url`} className="block text-sm font-medium text-neutral-700">
-                  MCP server URL
-                </label>
-                <input
-                  id={`${formId}-server-url`}
-                  value={serverUrl}
-                  onChange={(e) => setServerUrl(e.target.value)}
-                  placeholder="https://mcp.example.com/sse"
-                  className="mt-1 w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm"
-                />
-              </div>
-              <div>
-                <label htmlFor={`${formId}-transport`} className="block text-sm font-medium text-neutral-700">
-                  Transport
-                </label>
-                <input
-                  id={`${formId}-transport`}
-                  value={transport}
-                  onChange={(e) => setTransport(e.target.value)}
-                  className="mt-1 w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm"
-                />
-              </div>
-              <div>
-                <label htmlFor={`${formId}-headers`} className="block text-sm font-medium text-neutral-700">
-                  Headers JSON (optional)
-                </label>
-                <textarea
-                  id={`${formId}-headers`}
-                  value={headersJson}
-                  onChange={(e) => setHeadersJson(e.target.value)}
-                  rows={2}
-                  placeholder='{"Authorization": "Bearer ..."}'
-                  className="mt-1 w-full rounded-md border border-neutral-300 bg-white px-3 py-2 font-mono text-xs"
-                />
-              </div>
-            </>
-          ) : null}
-          <div className="flex flex-wrap gap-2 pt-2">
-            <button type="submit" className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white">
-              Save tool
-            </button>
+          <div>
+            <label htmlFor={`${formId}-transport`} className="block text-sm font-medium text-neutral-700">
+              Transport
+            </label>
+            <select
+              id={`${formId}-transport`}
+              value={mcpTransport}
+              onChange={(e) => setMcpTransport(e.target.value as McpTransport)}
+              className="mt-1 w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm"
+            >
+              <option value="sse">SSE</option>
+              <option value="http">HTTP</option>
+            </select>
+            <p className="mt-1 text-xs text-neutral-500">
+              Remote MCP via Server-Sent Events or HTTP — stdio/IO are not configured in this UI.
+            </p>
+          </div>
+          <div>
+            <label htmlFor={`${formId}-mcp-config`} className="block text-sm font-medium text-neutral-700">
+              MCP configuration (JSON)
+            </label>
+            <p className="mt-1 text-xs text-neutral-600">
+              Connection details for your MCP server (for example <code className="rounded bg-neutral-100 px-1">url</code>, auth,
+              or provider-specific fields). Must be a single JSON object.
+            </p>
+            <textarea
+              id={`${formId}-mcp-config`}
+              value={mcpConfigJson}
+              onChange={(e) => {
+                setMcpConfigJson(e.target.value);
+                setFormErr(null);
+              }}
+              rows={10}
+              spellCheck={false}
+              className="mt-2 w-full rounded-md border border-neutral-300 bg-white px-3 py-2 font-mono text-xs leading-relaxed"
+            />
+          </div>
+          <div>
+            <label htmlFor={`${formId}-headers`} className="block text-sm font-medium text-neutral-700">
+              Headers JSON (optional)
+            </label>
+            <textarea
+              id={`${formId}-headers`}
+              value={headersJson}
+              onChange={(e) => setHeadersJson(e.target.value)}
+              rows={2}
+              placeholder='{"Authorization": "Bearer ..."}'
+              className="mt-1 w-full rounded-md border border-neutral-300 bg-white px-3 py-2 font-mono text-xs"
+            />
+          </div>
+          <div className="flex flex-wrap justify-end gap-2 border-t border-neutral-200 pt-4">
             <button type="button" className="rounded-md border border-neutral-300 px-4 py-2 text-sm" onClick={closeRegister}>
               Cancel
+            </button>
+            <button type="submit" className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white">
+              Save tool
             </button>
           </div>
         </form>
@@ -181,39 +221,65 @@ export default function ToolsPage() {
           <thead className="bg-neutral-50 text-xs font-semibold uppercase tracking-wide text-neutral-500">
             <tr>
               <th className="px-4 py-2">Name</th>
-              <th className="px-4 py-2">Kind</th>
+              <th className="px-4 py-2">Transport</th>
               <th className="px-4 py-2">Created by</th>
               <th className="px-4 py-2">Details</th>
-              <th className="px-4 py-2 w-20" />
+              <th className="w-20 px-4 py-2" />
             </tr>
           </thead>
           <tbody className="divide-y divide-neutral-200 bg-white">
-            {tools.map((t) => (
-              <tr key={t.id}>
-                <td className="px-4 py-2 font-medium">{t.name}</td>
-                <td className="px-4 py-2">{t.kind}</td>
-                <td className="px-4 py-2 text-neutral-600">{t.createdBy}</td>
-                <td className="max-w-xs truncate px-4 py-2 text-xs text-neutral-600">{t.description || t.serverUrl || "—"}</td>
-                <td className="px-4 py-2">
-                  {(isAdmin || t.createdBy === username) && t.createdBy !== "system" ? (
-                    <button
-                      type="button"
-                      className="text-xs text-red-700 underline"
-                      onClick={() => {
-                        deleteTool(t.id, username, isAdmin);
-                        showSuccess("Tool removed.");
-                      }}
-                    >
-                      Delete
-                    </button>
-                  ) : (
-                    "—"
-                  )}
-                </td>
-              </tr>
-            ))}
+            {tools.length === 0 ? (
+              <EmptyTablePlaceholder
+                colSpan={5}
+                title="No tools registered"
+                description="Add MCP server metadata (JSON config, SSE or HTTP) for agents and pipelines. Stored in this browser only."
+                action={
+                  <button
+                    type="button"
+                    onClick={() => setRegisterOpen(true)}
+                    className="rounded-md bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-neutral-800"
+                  >
+                    Register a tool
+                  </button>
+                }
+              />
+            ) : (
+              toolsPage.pageItems.map((t) => (
+                <tr key={t.id}>
+                  <td className="px-4 py-2 font-medium">{t.name}</td>
+                  <td className="px-4 py-2 uppercase text-neutral-700">{t.mcpTransport}</td>
+                  <td className="px-4 py-2 text-neutral-600">{t.createdBy}</td>
+                  <td className="max-w-xs truncate px-4 py-2 text-xs text-neutral-600">{toolDetailsPreview(t)}</td>
+                  <td className="px-4 py-2">
+                    {(isAdmin || t.createdBy === username) && t.createdBy !== "system" ? (
+                      <button
+                        type="button"
+                        className="text-xs text-red-700 underline"
+                        onClick={() => {
+                          deleteTool(t.id, username, isAdmin);
+                          showSuccess("Tool removed.");
+                        }}
+                      >
+                        Delete
+                      </button>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
+        <TablePagination
+          label="tools"
+          page={toolsPage.page}
+          totalPages={toolsPage.totalPages}
+          total={toolsPage.total}
+          from={toolsPage.from}
+          to={toolsPage.to}
+          onPageChange={toolsPage.setPage}
+        />
       </div>
     </PageChrome>
   );

@@ -35,3 +35,8 @@ In Authentik UI, create/configure the OIDC provider with slug web-spa and set re
 http://localhost:8080/callback (production build behind nginx)
 http://localhost:5173/callback if you use Vite dev server
 Rebuild after changes: docker compose up --build -d.
+
+
+docker compose down
+docker compose build --no-cache web
+docker compose up -d --force-recreate web

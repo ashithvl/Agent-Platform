@@ -1,6 +1,7 @@
 import { useId, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
+import { EmptyState } from "../components/EmptyState";
 import { useFlash } from "../components/FlashContext";
 import { PageChrome } from "../components/PageChrome";
 import { isCustomWorkflow } from "../lib/workflowStorage";
@@ -50,18 +51,20 @@ export default function ApiAccessPage() {
       </div>
 
       {rows.length === 0 ? (
-        <div className="mt-8 rounded-lg border border-dashed border-neutral-300 bg-neutral-50/80 px-6 py-12 text-center">
-          <p className="text-sm font-semibold text-neutral-900">No workflows to show keys for</p>
-          <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-neutral-600">
-            Invoke URLs and API keys are listed per workflow. If your catalog is empty, add a runtime flow under
-            Workflows (or restore seed data) — then return here.
-          </p>
-          <Link
-            to="/workflows"
-            className="mt-6 inline-flex rounded-md bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-neutral-800"
-          >
-            Go to workflows
-          </Link>
+        <div className="mt-8 overflow-hidden rounded-xl border border-neutral-200 bg-neutral-50/60">
+          <EmptyState
+            visual="key"
+            title="No workflows to show keys for"
+            description="Invoke URLs and API keys are listed per workflow. If your catalog is empty, create a workflow from the Workflow page (or restore seed data), then return here."
+            action={
+              <Link
+                to="/workflows"
+                className="inline-flex rounded-md bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-neutral-800"
+              >
+                Open workflow catalog
+              </Link>
+            }
+          />
         </div>
       ) : (
         <div className="mt-8 space-y-4">

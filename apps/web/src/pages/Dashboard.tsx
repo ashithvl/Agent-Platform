@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 
 import { useAuth } from "../auth/AuthContext";
+import { EmptyState } from "../components/EmptyState";
 import { PageChrome } from "../components/PageChrome";
 import { AGENT_SPECS_CHANGED, listAgentSpecs } from "../lib/agentSpecStorage";
 import { useSyncedList } from "../lib/useSyncedList";
@@ -23,11 +24,12 @@ export default function Dashboard() {
         >
           <strong className="font-semibold">Role-based sidebar:</strong> Agents, workflows, knowledge, tools, and data
           ingestion only appear when your account has the <span className="font-medium">builder</span>,{" "}
-          <span className="font-medium">admin</span>, or <span className="font-medium">platform-admin</span> role. Open{" "}
-          <Link className="font-medium underline-offset-4 hover:underline" to="/settings">
-            Settings
+          <span className="font-medium">admin</span>, or <span className="font-medium">platform-admin</span> role. Sign
+          in with a demo account that includes <span className="font-medium">builder</span> — for example{" "}
+          <Link className="font-medium underline-offset-4 hover:underline" to="/login">
+            developer
           </Link>{" "}
-          to see your roles, or use a demo user that includes builder to explore the full catalog.
+          — from the login page to explore the full catalog.
         </div>
       ) : null}
 
@@ -116,6 +118,50 @@ export default function Dashboard() {
           </dl>
         </section>
       </div>
+
+      {isBuilder ? (
+        <section className="mt-8 rounded-lg border border-neutral-200 bg-white p-5 shadow-sm">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-neutral-500">Agents in this browser</h2>
+          <p className="mt-1 text-xs text-neutral-600">Quick preview — newest first (max six).</p>
+          {agentSpecs.length === 0 ? (
+            <div className="mt-4 rounded-lg border border-dashed border-neutral-200 bg-neutral-50/80">
+              <EmptyState
+                compact
+                visual="activity"
+                title="No agents configured"
+                description="Create an agent to use in pipelines and experiments. Definitions are stored only in this browser."
+                action={
+                  <Link
+                    to="/agents"
+                    className="inline-flex rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800"
+                  >
+                    Open agents
+                  </Link>
+                }
+              />
+            </div>
+          ) : (
+            <ul className="mt-4 divide-y divide-neutral-200 rounded-lg border border-neutral-200 bg-neutral-50/40 sm:max-w-2xl">
+              {agentSpecs.slice(0, 6).map((a) => (
+                <li key={a.id} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2.5 text-sm">
+                  <span className="font-medium text-neutral-900">{a.name}</span>
+                  <span className="text-xs text-neutral-500">
+                    {a.model} · {a.status}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+          {agentSpecs.length > 6 ? (
+            <p className="mt-2 text-xs text-neutral-500">
+              +{agentSpecs.length - 6} more —{" "}
+              <Link className="font-medium underline-offset-4 hover:underline" to="/agents">
+                view all in Agents
+              </Link>
+            </p>
+          ) : null}
+        </section>
+      ) : null}
     </PageChrome>
   );
 }

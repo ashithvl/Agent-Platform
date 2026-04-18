@@ -17,18 +17,20 @@ import RootRedirect from "./pages/RootRedirect";
 import SettingsPage from "./pages/SettingsPage";
 import TelemetryPage from "./pages/TelemetryPage";
 import ToolsPage from "./pages/ToolsPage";
+import WorkflowEditorPage from "./pages/WorkflowEditorPage";
 import WorkflowsPage from "./pages/WorkflowsPage";
 
 /** Workspace areas shared by end users and developers (no API keys for end users). */
 const builderPlus = ["builder", "admin", "platform-admin"] as const;
-/** Invoke URLs & API keys — developers and admins only. */
+/** Invoke URLs & API keys — admins only in this demo (`api_access` on admin account). */
 const apiAccessRoles = ["api_access", "admin", "platform-admin"] as const;
 const chatRoles = ["consumer", "builder", "admin", "platform-admin"] as const;
 const adminPlus = ["admin", "platform-admin"] as const;
 
 export default function App() {
   return (
-    <Routes>
+    <div className="flex min-h-0 min-h-dvh flex-1 flex-col">
+      <Routes>
       <Route path="/" element={<RootRedirect />} />
       <Route path="/login" element={<Login />} />
       <Route path="/admin" element={<Navigate to="/settings" replace />} />
@@ -43,6 +45,14 @@ export default function App() {
             element={
               <RoleRoute anyOf={[...builderPlus]}>
                 <AgentsPage />
+              </RoleRoute>
+            }
+          />
+          <Route
+            path="/workflows/:workflowId"
+            element={
+              <RoleRoute anyOf={[...builderPlus]}>
+                <WorkflowEditorPage />
               </RoleRoute>
             }
           />
@@ -94,7 +104,14 @@ export default function App() {
               </RoleRoute>
             }
           />
-          <Route path="/settings" element={<SettingsPage />} />
+          <Route
+            path="/settings"
+            element={
+              <RoleRoute anyOf={[...adminPlus]}>
+                <SettingsPage />
+              </RoleRoute>
+            }
+          />
           <Route
             path="/guardrails"
             element={
@@ -109,5 +126,6 @@ export default function App() {
 
       <Route path="*" element={<NotFoundPage />} />
     </Routes>
+    </div>
   );
 }

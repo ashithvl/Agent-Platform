@@ -95,9 +95,11 @@ export default function Login() {
         </form>
 
         <p className="mt-6 text-xs leading-relaxed text-neutral-500">
-          Demo: <code className="text-neutral-700">admin</code>/<code className="text-neutral-700">admin</code>,{" "}
-          <code className="text-neutral-700">developer</code> (API access),{" "}
-          <code className="text-neutral-700">user</code> (no API keys). Admins can add users under Settings.
+          Demo: <code className="text-neutral-700">admin</code>/<code className="text-neutral-700">admin</code> (Settings,
+          API access), <code className="text-neutral-700">developer</code>/<code className="text-neutral-700">developer</code>{" "}
+          (workspace builder, no API keys), <code className="text-neutral-700">user</code>/
+          <code className="text-neutral-700">user</code> (same workspace, no API keys). Only admins manage people under
+          Settings.
         </p>
         <p className="mt-4 text-center text-sm">
           <Link to="/" className="text-neutral-600 underline-offset-4 hover:underline">

@@ -3,7 +3,10 @@ import { type FormEvent, useCallback, useEffect, useId, useMemo, useState } from
 import { useAuth } from "../auth/AuthContext";
 import { Dialog } from "../components/Dialog";
 import { useFlash } from "../components/FlashContext";
+import { EmptyTablePlaceholder } from "../components/EmptyTablePlaceholder";
 import { PageChrome } from "../components/PageChrome";
+import { TablePagination } from "../components/TablePagination";
+import { usePagination } from "../hooks/usePagination";
 import {
   audienceLabel,
   createKnowledgeItem,
@@ -29,6 +32,9 @@ export default function KnowledgeHubPage() {
     if (isAdmin) return items;
     return items.filter((i) => i.ownerUsername === username || i.audiences.includes("developer"));
   }, [items, isAdmin, username]);
+
+  const tableCols = isAdmin ? 6 : 5;
+  const kPage = usePagination(visible, 10);
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -104,17 +110,43 @@ export default function KnowledgeHubPage() {
                 <th className="px-4 py-2">User groups</th>
                 <th className="px-4 py-2">Approvals</th>
                 {isAdmin ? <th className="px-4 py-2">Reassign groups</th> : null}
-                <th className="px-4 py-2 w-24" />
+                <th className="w-24 px-4 py-2" />
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-200 bg-white">
-              {visible.map((row) => (
-                <KnowledgeRow key={row.id} row={row} isAdmin={isAdmin} username={username} showSuccess={showSuccess} />
-              ))}
+              {visible.length === 0 ? (
+                <EmptyTablePlaceholder
+                  colSpan={tableCols}
+                  visual="folder"
+                  title="No knowledge items yet"
+                  description="Create a hub to attach approvals and audiences. Everything is stored locally in this browser."
+                  action={
+                    <button
+                      type="button"
+                      onClick={() => setCreateOpen(true)}
+                      className="rounded-md bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-neutral-800"
+                    >
+                      Add knowledge item
+                    </button>
+                  }
+                />
+              ) : (
+                kPage.pageItems.map((row) => (
+                  <KnowledgeRow key={row.id} row={row} isAdmin={isAdmin} username={username} showSuccess={showSuccess} />
+                ))
+              )}
             </tbody>
           </table>
+          <TablePagination
+            label="knowledge items"
+            page={kPage.page}
+            totalPages={kPage.totalPages}
+            total={kPage.total}
+            from={kPage.from}
+            to={kPage.to}
+            onPageChange={kPage.setPage}
+          />
         </div>
-        {visible.length === 0 ? <p className="mt-4 text-sm text-neutral-500">No knowledge items yet.</p> : null}
       </section>
 
       <Dialog open={createOpen} onClose={closeCreate} title="Create knowledge item" size="lg">
@@ -189,15 +221,15 @@ export default function KnowledgeHubPage() {
               {formErr}
             </p>
           ) : null}
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap justify-end gap-2 border-t border-neutral-200 pt-4">
+            <button type="button" className="rounded-md border border-neutral-300 px-4 py-2 text-sm" onClick={closeCreate}>
+              Cancel
+            </button>
             <button
               type="submit"
               className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800"
             >
               Save knowledge item
-            </button>
-            <button type="button" className="rounded-md border border-neutral-300 px-4 py-2 text-sm" onClick={closeCreate}>
-              Cancel
             </button>
           </div>
         </form>
@@ -254,11 +286,15 @@ function KnowledgeRow({
       </td>
       <td className="px-4 py-3 align-top text-neutral-800">{row.ownerUsername}</td>
       <td className="px-4 py-3 align-top text-neutral-700">
-        {row.audiences.map((a) => (
-          <span key={a} className="mr-1 inline-block rounded border border-neutral-300 px-1.5 py-0.5 text-xs">
-            {audienceLabel(a)}
-          </span>
-        ))}
+        {row.audiences.length === 0 ? (
+          <span className="text-xs italic text-neutral-500">No groups assigned</span>
+        ) : (
+          row.audiences.map((a) => (
+            <span key={a} className="mr-1 inline-block rounded border border-neutral-300 px-1.5 py-0.5 text-xs">
+              {audienceLabel(a)}
+            </span>
+          ))
+        )}
       </td>
       <td className="px-4 py-3 align-top text-xs text-neutral-700">
         {canEdit ? (
@@ -281,6 +317,8 @@ function KnowledgeRow({
               Save approvals
             </button>
           </div>
+        ) : row.approvals.length === 0 ? (
+          <p className="text-xs text-neutral-500">No approvals listed.</p>
         ) : (
           <ul className="list-inside list-disc">
             {row.approvals.map((a) => (
