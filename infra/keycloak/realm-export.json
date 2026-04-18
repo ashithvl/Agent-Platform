@@ -1,0 +1,90 @@
+{
+  "realm": "platform",
+  "displayName": "Enterprise AI Platform",
+  "enabled": true,
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": true,
+  "roles": {
+    "realm": [
+      { "name": "consumer" },
+      { "name": "builder" },
+      { "name": "admin" },
+      { "name": "platform-admin" }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "web-spa",
+      "name": "Web SPA",
+      "enabled": true,
+      "publicClient": true,
+      "protocol": "openid-connect",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "fullScopeAllowed": true,
+      "redirectUris": [
+        "http://localhost:8080/*",
+        "http://127.0.0.1:8080/*",
+        "http://localhost:8080/callback",
+        "http://127.0.0.1:8080/callback"
+      ],
+      "webOrigins": ["+", "http://localhost:8080", "http://127.0.0.1:8080"],
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      }
+    }
+  ],
+  "users": [
+    {
+      "username": "consumer",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Test",
+      "lastName": "Consumer",
+      "email": "consumer@local.test",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "consumer",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["consumer"]
+    },
+    {
+      "username": "builder",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Test",
+      "lastName": "Builder",
+      "email": "builder@local.test",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "builder",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["consumer", "builder"]
+    },
+    {
+      "username": "admin",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Test",
+      "lastName": "Admin",
+      "email": "admin@local.test",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "admin",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["consumer", "builder", "admin", "platform-admin"]
+    }
+  ]
+}

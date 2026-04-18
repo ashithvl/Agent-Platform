@@ -1,0 +1,213 @@
+services:
+  nginx:
+    build:
+      context: .
+      dockerfile: infra/nginx/Dockerfile
+    ports:
+      - "8080:80"
+    depends_on:
+      api-service:
+        condition: service_started
+    networks:
+      - platform
+
+  postgres-app:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: platform
+      POSTGRES_PASSWORD: platform
+      POSTGRES_DB: platform
+    volumes:
+      - pg-app-data:/var/lib/postgresql/data
+    networks:
+      - platform
+
+  postgres-keycloak:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: keycloak
+      POSTGRES_DB: keycloak
+    volumes:
+      - pg-keycloak-data:/var/lib/postgresql/data
+    networks:
+      - platform
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0
+    command:
+      - start-dev
+      - --import-realm
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres-keycloak:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: keycloak
+      KC_HEALTH_ENABLED: "true"
+      KC_HOSTNAME_STRICT: "false"
+      KC_HTTP_ENABLED: "true"
+    volumes:
+      - ./infra/keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json:ro
+    ports:
+      - "8090:8080"
+    depends_on:
+      postgres-keycloak:
+        condition: service_started
+    networks:
+      - platform
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+    networks:
+      - platform
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio-data:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    networks:
+      - platform
+
+  litellm:
+    image: ghcr.io/berriai/litellm:main-latest
+    environment:
+      LITELLM_MASTER_KEY: sk-litellm-master-key
+      STORE_MODEL_IN_DB: "false"
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    command: ["--config", "/app/config.yaml", "--port", "4000", "--num_workers", "1"]
+    volumes:
+      - ./infra/litellm/config.yaml:/app/config.yaml:ro
+    networks:
+      - platform
+
+  agent-service:
+    build:
+      context: ./services/agent-service
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgresql+asyncpg://platform:platform@postgres-app:5432/platform
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-dev-internal-token}
+    depends_on:
+      postgres-app:
+        condition: service_started
+    networks:
+      - platform
+
+  execution-service:
+    build:
+      context: ./services/execution-service
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgresql+asyncpg://platform:platform@postgres-app:5432/platform
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-dev-internal-token}
+      LITELLM_URL: http://litellm:4000
+      LITELLM_API_KEY: sk-litellm-master-key
+      LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
+      LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
+      LANGFUSE_HOST: ${LANGFUSE_HOST:-}
+    depends_on:
+      postgres-app:
+        condition: service_started
+      litellm:
+        condition: service_started
+      agent-service:
+        condition: service_started
+    networks:
+      - platform
+
+  knowledge-service:
+    build:
+      context: ./services/knowledge-service
+      dockerfile: Dockerfile
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-dev-internal-token}
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_BUCKET: documents
+    depends_on:
+      postgres-app:
+        condition: service_started
+      redis:
+        condition: service_started
+      minio:
+        condition: service_started
+    networks:
+      - platform
+
+  worker-service:
+    build:
+      context: ./services/worker-service
+      dockerfile: Dockerfile
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-dev-internal-token}
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_BUCKET: documents
+      LANCEDB_PATH: /data/lancedb
+    volumes:
+      - lancedb-data:/data/lancedb
+    depends_on:
+      postgres-app:
+        condition: service_started
+      redis:
+        condition: service_started
+      minio:
+        condition: service_started
+      agent-service:
+        condition: service_started
+    networks:
+      - platform
+
+  api-service:
+    build:
+      context: ./services/api-service
+      dockerfile: Dockerfile
+    environment:
+      KEYCLOAK_URL: http://keycloak:8080
+      KEYCLOAK_REALM: platform
+      KEYCLOAK_CLIENT_ID: web-spa
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-dev-internal-token}
+      AGENT_SERVICE_URL: http://agent-service:8001
+      EXECUTION_SERVICE_URL: http://execution-service:8002
+      KNOWLEDGE_SERVICE_URL: http://knowledge-service:8003
+      REDIS_URL: redis://redis:6379/1
+    depends_on:
+      keycloak:
+        condition: service_started
+      agent-service:
+        condition: service_started
+      execution-service:
+        condition: service_started
+      knowledge-service:
+        condition: service_started
+      redis:
+        condition: service_started
+    networks:
+      - platform
+
+networks:
+  platform:
+    driver: bridge
+
+volumes:
+  pg-app-data:
+  pg-keycloak-data:
+  redis-data:
+  minio-data:
+  lancedb-data:
