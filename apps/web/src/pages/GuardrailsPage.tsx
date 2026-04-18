@@ -1,6 +1,8 @@
-import { type FormEvent, useCallback, useState } from "react";
+import { type FormEvent, useCallback, useId, useState } from "react";
 
 import { useAuth } from "../auth/AuthContext";
+import { useFlash } from "../components/FlashContext";
+import { PageChrome } from "../components/PageChrome";
 import { listGuardrails, setGuardrailEnabled, type GuardrailPolicy } from "../lib/guardrailStorage";
 import {
   NEMO_RAILS_CHANGED,
@@ -13,6 +15,8 @@ import { useSyncedList } from "../lib/useSyncedList";
 
 export default function GuardrailsPage() {
   const { user, realmRoles } = useAuth();
+  const nemoFormId = useId();
+  const { showSuccess } = useFlash();
   const username = user?.profile.preferred_username ?? user?.sub ?? "";
   const isAdmin = realmRoles.has("admin") || realmRoles.has("platform-admin");
   const [policies, setPolicies] = useState<GuardrailPolicy[]>(() => listGuardrails());
@@ -21,15 +25,24 @@ export default function GuardrailsPage() {
   const [nName, setNName] = useState("");
   const [nPlacement, setNPlacement] = useState<NeMoPlacement>("generic");
   const [nRaw, setNRaw] = useState("# NeMo Colang / YAML (demo — not executed in browser)\n");
+  const [nFormErr, setNFormErr] = useState<string | null>(null);
 
-  const toggle = useCallback((id: string, enabled: boolean) => {
-    setGuardrailEnabled(id, enabled);
-    setPolicies(listGuardrails());
-  }, []);
+  const toggle = useCallback(
+    (id: string, enabled: boolean) => {
+      setGuardrailEnabled(id, enabled);
+      setPolicies(listGuardrails());
+      showSuccess(enabled ? "Policy enabled." : "Policy disabled.");
+    },
+    [showSuccess],
+  );
 
   const onCreateRail = (e: FormEvent) => {
     e.preventDefault();
-    if (!nName.trim()) return;
+    if (!nName.trim()) {
+      setNFormErr("Name is required.");
+      return;
+    }
+    setNFormErr(null);
     createNeMoRail({
       name: nName.trim(),
       rawConfig: nRaw,
@@ -39,18 +52,14 @@ export default function GuardrailsPage() {
     setNName("");
     setNRaw("# NeMo Colang / YAML (demo — not executed in browser)\n");
     setNPlacement("generic");
+    showSuccess("NeMo config saved.");
   };
 
   return (
-    <div className="mx-auto max-w-4xl px-6 py-10">
-      <header className="border-b border-neutral-200 pb-6">
-        <h1 className="text-2xl font-semibold tracking-tight text-neutral-900">Guardrails</h1>
-        <p className="mt-1 text-sm text-neutral-600">
-          Quick policy toggles plus NeMo Guardrails config blobs for pipelines. Enforcement requires a future NeMo
-          runtime — this page only stores definitions locally.
-        </p>
-      </header>
-
+    <PageChrome
+      title="Guardrails"
+      description="Quick policy toggles plus NeMo Guardrails config blobs for pipelines. Enforcement requires a future NeMo runtime — this page only stores definitions locally."
+    >
       <section className="mt-10">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-neutral-500">Workspace policies</h2>
         <ul className="mt-4 space-y-3">
@@ -77,17 +86,31 @@ export default function GuardrailsPage() {
         </p>
 
         <form onSubmit={onCreateRail} className="mt-6 space-y-4 rounded-lg border border-neutral-200 bg-neutral-50/50 p-4">
+          {nFormErr ? (
+            <p className="text-sm text-red-600" role="alert">
+              {nFormErr}
+            </p>
+          ) : null}
           <div>
-            <label className="block text-sm font-medium text-neutral-700">Name</label>
+            <label htmlFor={`${nemoFormId}-name`} className="block text-sm font-medium text-neutral-700">
+              Name
+            </label>
             <input
+              id={`${nemoFormId}-name`}
               value={nName}
-              onChange={(e) => setNName(e.target.value)}
+              onChange={(e) => {
+                setNName(e.target.value);
+                setNFormErr(null);
+              }}
               className="mt-1 w-full max-w-md rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-neutral-700">Default placement hint</label>
+            <label htmlFor={`${nemoFormId}-placement`} className="block text-sm font-medium text-neutral-700">
+              Default placement hint
+            </label>
             <select
+              id={`${nemoFormId}-placement`}
               value={nPlacement}
               onChange={(e) => setNPlacement(e.target.value as NeMoPlacement)}
               className="mt-1 w-full max-w-md rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm"
@@ -99,12 +122,15 @@ export default function GuardrailsPage() {
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-neutral-700">Raw config (YAML / Colang)</label>
+            <label htmlFor={`${nemoFormId}-raw`} className="block text-sm font-medium text-neutral-700">
+              Raw config (YAML / Colang)
+            </label>
             <textarea
+              id={`${nemoFormId}-raw`}
               value={nRaw}
               onChange={(e) => setNRaw(e.target.value)}
               rows={8}
-              className="mt-1 w-full font-mono text-xs"
+              className="mt-1 w-full rounded-md border border-neutral-300 bg-white px-3 py-2 font-mono text-xs"
             />
           </div>
           <button type="submit" className="rounded-md bg-neutral-900 px-4 py-2 text-sm text-white">
@@ -124,7 +150,10 @@ export default function GuardrailsPage() {
                 <button
                   type="button"
                   className="text-xs text-red-700 underline"
-                  onClick={() => deleteNeMoRail(r.id, username, isAdmin)}
+                  onClick={() => {
+                    deleteNeMoRail(r.id, username, isAdmin);
+                    showSuccess("NeMo config removed.");
+                  }}
                 >
                   Delete
                 </button>
@@ -133,7 +162,7 @@ export default function GuardrailsPage() {
           ))}
         </ul>
       </section>
-    </div>
+    </PageChrome>
   );
 }
 

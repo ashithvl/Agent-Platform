@@ -1,8 +1,11 @@
 import { Link } from "react-router-dom";
 
+import { SkipToMain } from "../components/SkipToMain";
+
 export default function LandingPage() {
   return (
     <div className="flex min-h-screen flex-col bg-white text-neutral-900">
+      <SkipToMain />
       <header className="border-b border-neutral-200">
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-6">
           <span className="text-sm font-semibold tracking-tight">Enterprise AI</span>
@@ -14,7 +17,7 @@ export default function LandingPage() {
           </Link>
         </div>
       </header>
-      <main className="mx-auto flex max-w-2xl flex-1 flex-col justify-center px-6 py-20 text-center">
+      <main id="main-content" className="mx-auto flex max-w-2xl flex-1 flex-col justify-center px-6 py-20 text-center">
         <h1 className="text-4xl font-semibold tracking-tight text-neutral-900">Operations-grade AI workspace</h1>
         <p className="mx-auto mt-4 max-w-lg text-sm leading-relaxed text-neutral-600">
           Dashboards, workflows, API keys, chat, guardrails, and telemetry — wired in the client for demos. Sign in to

@@ -17,7 +17,8 @@ export const NAV_ITEMS: NavItem[] = [
   { to: "/chat", label: "Chat", icon: "chat", anyOf: ["consumer", "builder", "admin", "platform-admin"] },
   { to: "/settings", label: "Settings", icon: "settings" },
   { to: "/guardrails", label: "Guardrails", icon: "shield", anyOf: ["admin", "platform-admin"] },
-  { to: "/telemetry", label: "Telemetry", icon: "chart", anyOf: ["admin", "platform-admin"] },
+  /** Usage summaries (mock) — visible to every signed-in user. */
+  { to: "/telemetry", label: "Telemetry", icon: "chart" },
 ];
 
 export function navVisible(roles: Set<string>, item: NavItem): boolean {

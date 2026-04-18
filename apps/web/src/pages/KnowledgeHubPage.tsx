@@ -1,6 +1,9 @@
-import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useId, useMemo, useState } from "react";
 
 import { useAuth } from "../auth/AuthContext";
+import { Dialog } from "../components/Dialog";
+import { useFlash } from "../components/FlashContext";
+import { PageChrome } from "../components/PageChrome";
 import {
   audienceLabel,
   createKnowledgeItem,
@@ -16,6 +19,8 @@ const AUDIENCES: HubAudience[] = ["end_user", "developer", "admin"];
 
 export default function KnowledgeHubPage() {
   const { user, realmRoles } = useAuth();
+  const createFormId = useId();
+  const { showSuccess } = useFlash();
   const items = useKnowledgeList();
   const username = user?.profile.preferred_username ?? user?.sub ?? "";
   const isAdmin = realmRoles.has("admin") || realmRoles.has("platform-admin");
@@ -30,6 +35,7 @@ export default function KnowledgeHubPage() {
   const [newAudiences, setNewAudiences] = useState<HubAudience[]>(["developer"]);
   const [approvalLines, setApprovalLines] = useState<string[]>([""]);
   const [formErr, setFormErr] = useState<string | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
 
   const toggleNewAudience = (a: HubAudience) => {
     setNewAudiences((prev) => (prev.includes(a) ? prev.filter((x) => x !== a) : [...prev, a]));
@@ -54,6 +60,17 @@ export default function KnowledgeHubPage() {
       audiences: newAudiences,
       approvals: approvals.length ? approvals : ["Draft approval"],
     });
+    showSuccess("Knowledge item saved.");
+    setTitle("");
+    setDescription("");
+    setNewAudiences(["developer"]);
+    setApprovalLines([""]);
+    setCreateOpen(false);
+  };
+
+  const closeCreate = () => {
+    setCreateOpen(false);
+    setFormErr(null);
     setTitle("");
     setDescription("");
     setNewAudiences(["developer"]);
@@ -61,15 +78,19 @@ export default function KnowledgeHubPage() {
   };
 
   return (
-    <div className="mx-auto max-w-6xl px-6 py-10">
-      <header className="border-b border-neutral-200 pb-6">
-        <h1 className="text-2xl font-semibold tracking-tight text-neutral-900">Knowledge hub</h1>
-        <p className="mt-1 text-sm text-neutral-600">
-          Multiple knowledge items per person; each item can carry many approvals. Admins see every hub and which user
-          group it serves. Developers manage their own hubs and anything shared with the developer cohort.
-        </p>
-      </header>
-
+    <PageChrome
+      title="Knowledge hub"
+      description="Multiple knowledge items per person; each item can carry many approvals. Admins see every hub and which user group it serves. Developers manage their own hubs and anything shared with the developer cohort."
+      actions={
+        <button
+          type="button"
+          onClick={() => setCreateOpen(true)}
+          className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800"
+        >
+          Add knowledge item
+        </button>
+      }
+    >
       <section className="mt-10">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-neutral-500">
           {isAdmin ? "All knowledge items" : "Your hubs & developer-scoped content"}
@@ -88,7 +109,7 @@ export default function KnowledgeHubPage() {
             </thead>
             <tbody className="divide-y divide-neutral-200 bg-white">
               {visible.map((row) => (
-                <KnowledgeRow key={row.id} row={row} isAdmin={isAdmin} username={username} />
+                <KnowledgeRow key={row.id} row={row} isAdmin={isAdmin} username={username} showSuccess={showSuccess} />
               ))}
             </tbody>
           </table>
@@ -96,32 +117,38 @@ export default function KnowledgeHubPage() {
         {visible.length === 0 ? <p className="mt-4 text-sm text-neutral-500">No knowledge items yet.</p> : null}
       </section>
 
-      <section className="mt-12 border-t border-neutral-200 pt-10">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-neutral-500">Create knowledge item</h2>
-        <form onSubmit={onCreate} className="mt-4 max-w-xl space-y-4">
+      <Dialog open={createOpen} onClose={closeCreate} title="Create knowledge item" size="lg">
+        <form onSubmit={onCreate} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-neutral-700">Title</label>
+            <label htmlFor={`${createFormId}-title`} className="block text-sm font-medium text-neutral-700">
+              Title
+            </label>
             <input
+              id={`${createFormId}-title`}
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm focus:border-neutral-900 focus:outline-none focus:ring-1 focus:ring-neutral-900"
+              className="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-neutral-700">Description</label>
+            <label htmlFor={`${createFormId}-description`} className="block text-sm font-medium text-neutral-700">
+              Description
+            </label>
             <textarea
+              id={`${createFormId}-description`}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={3}
-              className="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm focus:border-neutral-900 focus:outline-none focus:ring-1 focus:ring-neutral-900"
+              className="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
             />
           </div>
           <fieldset>
             <legend className="text-sm font-medium text-neutral-700">User groups (who this hub is for)</legend>
             <div className="mt-2 flex flex-wrap gap-3 text-sm">
               {AUDIENCES.map((a) => (
-                <label key={a} className="flex items-center gap-2">
+                <label key={a} htmlFor={`${createFormId}-aud-${a}`} className="flex items-center gap-2">
                   <input
+                    id={`${createFormId}-aud-${a}`}
                     type="checkbox"
                     checked={newAudiences.includes(a)}
                     onChange={() => toggleNewAudience(a)}
@@ -131,18 +158,23 @@ export default function KnowledgeHubPage() {
               ))}
             </div>
           </fieldset>
-          <div>
-            <span className="text-sm font-medium text-neutral-700">Approvals (one per line)</span>
+          <fieldset className="min-w-0 border-0 p-0">
+            <legend className="text-sm font-medium text-neutral-700">Approvals (one per line)</legend>
             {approvalLines.map((line, idx) => (
-              <input
-                key={idx}
-                value={line}
-                onChange={(e) =>
-                  setApprovalLines((prev) => prev.map((p, i) => (i === idx ? e.target.value : p)))
-                }
-                className="mt-1 block w-full rounded-md border border-neutral-300 px-3 py-2 text-sm focus:border-neutral-900 focus:outline-none focus:ring-1 focus:ring-neutral-900"
-                placeholder="e.g. Policy doc v3 — approved"
-              />
+              <div key={idx} className="mt-2">
+                <label htmlFor={`${createFormId}-approval-${idx}`} className="sr-only">
+                  Approval line {idx + 1}
+                </label>
+                <input
+                  id={`${createFormId}-approval-${idx}`}
+                  value={line}
+                  onChange={(e) =>
+                    setApprovalLines((prev) => prev.map((p, i) => (i === idx ? e.target.value : p)))
+                  }
+                  className="block w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
+                  placeholder="e.g. Policy doc v3 — approved"
+                />
+              </div>
             ))}
             <button
               type="button"
@@ -151,21 +183,26 @@ export default function KnowledgeHubPage() {
             >
               + Add another approval
             </button>
-          </div>
+          </fieldset>
           {formErr ? (
             <p className="text-sm text-red-600" role="alert">
               {formErr}
             </p>
           ) : null}
-          <button
-            type="submit"
-            className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800"
-          >
-            Save knowledge item
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="submit"
+              className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800"
+            >
+              Save knowledge item
+            </button>
+            <button type="button" className="rounded-md border border-neutral-300 px-4 py-2 text-sm" onClick={closeCreate}>
+              Cancel
+            </button>
+          </div>
         </form>
-      </section>
-    </div>
+      </Dialog>
+    </PageChrome>
   );
 }
 
@@ -173,11 +210,14 @@ function KnowledgeRow({
   row,
   isAdmin,
   username,
+  showSuccess,
 }: {
   row: KnowledgeItem;
   isAdmin: boolean;
   username: string;
+  showSuccess: (message: string) => void;
 }) {
+  const rowFieldId = useId();
   const [editing, setEditing] = useState(false);
   const [draftAudiences, setDraftAudiences] = useState<HubAudience[]>(row.audiences);
   const [approvalDraft, setApprovalDraft] = useState(row.approvals.join("\n"));
@@ -191,16 +231,19 @@ function KnowledgeRow({
   const saveAudiences = useCallback(() => {
     updateKnowledgeAudiences(row.id, draftAudiences);
     setEditing(false);
-  }, [row.id, draftAudiences]);
+    showSuccess("User groups updated.");
+  }, [row.id, draftAudiences, showSuccess]);
 
   const saveApprovals = useCallback(() => {
     const lines = approvalDraft.split("\n").map((s) => s.trim()).filter(Boolean);
     updateKnowledgeItem(row.id, username, isAdmin, { approvals: lines.length ? lines : ["(none)"] });
-  }, [approvalDraft, row.id, username, isAdmin]);
+    showSuccess("Approvals saved.");
+  }, [approvalDraft, row.id, username, isAdmin, showSuccess]);
 
   const onDelete = () => {
     if (!window.confirm("Delete this knowledge item?")) return;
     deleteKnowledgeItem(row.id, username, isAdmin);
+    showSuccess("Knowledge item removed.");
   };
 
   return (
@@ -220,11 +263,15 @@ function KnowledgeRow({
       <td className="px-4 py-3 align-top text-xs text-neutral-700">
         {canEdit ? (
           <div>
+            <label htmlFor={`${rowFieldId}-approvals`} className="sr-only">
+              Approvals for {row.title}
+            </label>
             <textarea
+              id={`${rowFieldId}-approvals`}
               value={approvalDraft}
               onChange={(e) => setApprovalDraft(e.target.value)}
               rows={Math.min(6, Math.max(2, row.approvals.length + 1))}
-              className="w-full min-w-[180px] rounded border border-neutral-300 px-2 py-1 font-mono text-[11px] focus:border-neutral-900 focus:outline-none"
+              className="w-full min-w-[180px] rounded border border-neutral-300 px-2 py-1 font-mono text-[11px]"
             />
             <button
               type="button"
@@ -247,8 +294,9 @@ function KnowledgeRow({
           {editing ? (
             <div className="space-y-2">
               {AUDIENCES.map((a) => (
-                <label key={a} className="flex items-center gap-2 text-xs">
+                <label key={a} htmlFor={`${rowFieldId}-grp-${a}`} className="flex items-center gap-2 text-xs">
                   <input
+                    id={`${rowFieldId}-grp-${a}`}
                     type="checkbox"
                     checked={draftAudiences.includes(a)}
                     onChange={() =>

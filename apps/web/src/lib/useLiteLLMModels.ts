@@ -1,36 +1,23 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 
-import { type LiteLLMModelOption, fetchLiteLLMModels } from "./liteLLMModels";
+import { type LiteLLMModelOption, listStaticLiteLLMModels } from "./liteLLMModels";
 
 export type LiteLLMModelsState = {
   models: LiteLLMModelOption[];
+  /** Always false — catalog is bundled; no remote fetch. */
   loading: boolean;
+  /** Always null — no gateway errors. */
   error: string | null;
+  /** Re-applies the bundled catalog (useful after hot reload or tests). */
   refresh: () => Promise<void>;
 };
 
 export function useLiteLLMModels(): LiteLLMModelsState {
-  const [models, setModels] = useState<LiteLLMModelOption[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [models, setModels] = useState<LiteLLMModelOption[]>(() => listStaticLiteLLMModels());
 
   const refresh = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const list = await fetchLiteLLMModels();
-      setModels(list);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-      setModels([]);
-    } finally {
-      setLoading(false);
-    }
+    setModels(listStaticLiteLLMModels());
   }, []);
 
-  useEffect(() => {
-    void refresh();
-  }, [refresh]);
-
-  return { models, loading, error, refresh };
+  return { models, loading: false, error: null, refresh };
 }

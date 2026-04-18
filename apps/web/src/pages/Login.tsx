@@ -1,10 +1,13 @@
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useId, useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 
 import { useAuth } from "../auth/AuthContext";
+import { PageBusy } from "../components/PageBusy";
+import { SkipToMain } from "../components/SkipToMain";
 
 export default function Login() {
   const { user, loading, login, error } = useAuth();
+  const formId = useId();
   const navigate = useNavigate();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -12,11 +15,7 @@ export default function Login() {
   const [localErr, setLocalErr] = useState<string | null>(null);
 
   if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-white">
-        <p className="text-sm text-neutral-500">Loading…</p>
-      </div>
-    );
+    return <PageBusy message="Checking session…" layout="fullscreen" />;
   }
   if (user) {
     return <Navigate to="/dashboard" replace />;
@@ -38,6 +37,7 @@ export default function Login() {
 
   return (
     <div className="flex min-h-screen flex-col bg-white text-neutral-900">
+      <SkipToMain />
       <header className="border-b border-neutral-200">
         <div className="mx-auto flex h-14 max-w-lg items-center px-6">
           <Link to="/" className="text-sm font-semibold tracking-tight hover:underline">
@@ -45,33 +45,39 @@ export default function Login() {
           </Link>
         </div>
       </header>
-      <div className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center px-6 py-12">
+      <div id="main-content" className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center px-6 py-12">
         <h1 className="text-2xl font-semibold tracking-tight">Sign in</h1>
         <p className="mt-2 text-sm text-neutral-600">Use your workspace username and password. Data stays in this browser.</p>
 
         <form onSubmit={onSubmit} className="mt-8 space-y-4">
           <div>
-            <label className="block text-sm font-medium text-neutral-700">Username</label>
+            <label htmlFor={`${formId}-username`} className="block text-sm font-medium text-neutral-700">
+              Username
+            </label>
             <input
+              id={`${formId}-username`}
               type="text"
               name="username"
               autoComplete="username"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               required
-              className="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm text-neutral-900 focus:border-neutral-900 focus:outline-none focus:ring-1 focus:ring-neutral-900"
+              className="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm text-neutral-900"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-neutral-700">Password</label>
+            <label htmlFor={`${formId}-password`} className="block text-sm font-medium text-neutral-700">
+              Password
+            </label>
             <input
+              id={`${formId}-password`}
               type="password"
               name="password"
               autoComplete="current-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              className="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm text-neutral-900 focus:border-neutral-900 focus:outline-none focus:ring-1 focus:ring-neutral-900"
+              className="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm text-neutral-900"
             />
           </div>
           {displayErr ? (

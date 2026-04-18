@@ -9,3 +9,42 @@ body,
 body {
   @apply bg-white text-neutral-900 antialiased;
 }
+
+/* Skip to main: off-screen until keyboard focus (WCAG 2.4.1). */
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+.skip-link:focus {
+  position: fixed;
+  left: 1rem;
+  top: 1rem;
+  z-index: 100000;
+  width: auto;
+  height: auto;
+  overflow: visible;
+  padding: 0.5rem 1rem;
+  border-radius: 0.375rem;
+  background-color: #171717;
+  color: #fff;
+  font-size: 0.875rem;
+  font-weight: 500;
+  text-decoration: none;
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+/* Shared focus affordance for form controls (keyboard + visual consistency). */
+@layer base {
+  :where(
+    input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]):not([type="file"]),
+    textarea,
+    select
+  ) {
+    @apply focus:border-neutral-900 focus:outline-none focus:ring-1 focus:ring-neutral-900;
+  }
+}

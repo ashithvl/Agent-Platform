@@ -2,6 +2,7 @@ import { useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 
 import { NavIcon } from "../components/NavIcons";
+import { SkipToMain } from "../components/SkipToMain";
 import { useAuth } from "../auth/AuthContext";
 import { NAV_ITEMS, navVisible } from "../nav/navConfig";
 
@@ -14,6 +15,7 @@ export default function AppShell() {
 
   return (
     <div className="flex min-h-screen bg-white text-neutral-900">
+      <SkipToMain />
       {/* Mobile overlay */}
       {mobileOpen ? (
         <button
@@ -27,11 +29,11 @@ export default function AppShell() {
       {/* Sidebar */}
       <aside
         className={[
-          "fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-neutral-200 bg-neutral-50 transition-transform lg:static lg:translate-x-0",
+          "fixed inset-y-0 left-0 z-50 flex w-64 min-h-0 flex-col border-r border-neutral-200 bg-neutral-50 transition-transform lg:static lg:min-h-screen lg:translate-x-0",
           mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0",
         ].join(" ")}
       >
-        <div className="flex h-14 items-center justify-between border-b border-neutral-200 px-4">
+        <div className="flex h-14 shrink-0 items-center justify-between border-b border-neutral-200 px-4">
           <button
             type="button"
             onClick={() => navigate("/dashboard")}
@@ -51,7 +53,7 @@ export default function AppShell() {
           </button>
         </div>
 
-        <nav className="flex-1 space-y-0.5 overflow-y-auto px-2 py-4">
+        <nav className="min-h-0 flex-1 space-y-0.5 overflow-y-auto overscroll-contain px-2 py-4">
           {items.map((item) => (
             <NavLink
               key={item.to}
@@ -70,7 +72,7 @@ export default function AppShell() {
           ))}
         </nav>
 
-        <div className="border-t border-neutral-200 p-3">
+        <div className="mt-auto shrink-0 border-t border-neutral-200 bg-neutral-50 p-3">
           <div className="truncate px-2 text-xs text-neutral-500">
             {user?.profile.preferred_username ?? user?.sub}
           </div>
@@ -99,7 +101,7 @@ export default function AppShell() {
           <span className="font-semibold text-neutral-900">Enterprise AI</span>
         </header>
 
-        <main className="flex min-h-0 flex-1 flex-col bg-white">
+        <main id="main-content" className="flex min-h-0 flex-1 flex-col bg-white">
           <Outlet />
         </main>
       </div>

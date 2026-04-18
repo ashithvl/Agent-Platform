@@ -39,3 +39,38 @@ export function totals7d(days: DayPoint[]): { cost: number; requests: number; to
     { cost: 0, requests: 0, tokens: 0 },
   );
 }
+
+/** Mock per-entity rollups for workspace telemetry (deterministic from keys). */
+export type EntityUsage = {
+  key: string;
+  displayName: string;
+  requests: number;
+  costUsd: number;
+  tokensOut: number;
+};
+
+const keyHash = (s: string) => {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+  return Math.abs(h) || 1;
+};
+
+export function mockEntityUsage(key: string, displayName: string): EntityUsage {
+  const rnd = seededRandom(keyHash(key));
+  const requests = 40 + Math.floor(rnd() * 12000);
+  const costUsd = Math.round((rnd() * 55 + requests * 0.0008) * 100) / 100;
+  const tokensOut = Math.floor(requests * (120 + rnd() * 380));
+  return { key, displayName, requests, costUsd, tokensOut };
+}
+
+export function usageByUsers(usernames: string[]): EntityUsage[] {
+  return usernames.map((u) => mockEntityUsage(`acct:${u}`, u));
+}
+
+export function usageByAgents(agents: { id: string; name: string }[]): EntityUsage[] {
+  return agents.map((a) => mockEntityUsage(`agent:${a.id}`, a.name));
+}
+
+export function usageByWorkflows(workflows: { id: string; name: string }[]): EntityUsage[] {
+  return workflows.map((w) => mockEntityUsage(`wf:${w.id}`, w.name));
+}

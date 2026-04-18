@@ -1,6 +1,7 @@
 import { Navigate } from "react-router-dom";
 
 import { useAuth } from "../auth/AuthContext";
+import { PageBusy } from "../components/PageBusy";
 
 import LandingPage from "./LandingPage";
 
@@ -9,11 +10,7 @@ export default function RootRedirect() {
   const { user, loading } = useAuth();
 
   if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-white">
-        <p className="text-sm text-neutral-500">Loading…</p>
-      </div>
-    );
+    return <PageBusy message="Checking session…" layout="fullscreen" />;
   }
 
   if (user) {

@@ -1,6 +1,8 @@
-import { type FormEvent, useMemo, useState } from "react";
+import { type FormEvent, useId, useMemo, useState } from "react";
 
 import { useAuth } from "../auth/AuthContext";
+import { useFlash } from "../components/FlashContext";
+import { PageChrome } from "../components/PageChrome";
 import { filterEmbeddingLike, filterRerankLike } from "../lib/liteLLMModels";
 import {
   KNOWLEDGE_CHANGED,
@@ -14,9 +16,11 @@ import { useSyncedList } from "../lib/useSyncedList";
 
 export default function DataIngestionPage() {
   const { user, realmRoles } = useAuth();
+  const formId = useId();
+  const { showSuccess } = useFlash();
   const username = user?.profile.preferred_username ?? user?.sub ?? "";
   const isAdmin = realmRoles.has("admin") || realmRoles.has("platform-admin");
-  const { models, loading: modelsLoading, error: modelsErr } = useLiteLLMModels();
+  const { models } = useLiteLLMModels();
   const embedOptions = useMemo(() => filterEmbeddingLike(models), [models]);
   const rerankOptions = useMemo(() => filterRerankLike(models), [models]);
   const profiles = useSyncedList(RAG_PROFILES_CHANGED, listRagProfiles);
@@ -37,6 +41,7 @@ export default function DataIngestionPage() {
   const [hybridRrf, setHybridRrf] = useState(false);
   const [useReranker, setUseReranker] = useState(false);
   const [rerankModel, setRerankModel] = useState("");
+  const [formErr, setFormErr] = useState<string | null>(null);
 
   const resetForm = () => {
     setName("");
@@ -58,7 +63,15 @@ export default function DataIngestionPage() {
 
   const onCreate = (e: FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) return;
+    if (!name.trim()) {
+      setFormErr("Name is required.");
+      return;
+    }
+    if (useReranker && !rerankModel.trim()) {
+      setFormErr("Select a rerank model or turn off reranking.");
+      return;
+    }
+    setFormErr(null);
     createRagProfile({
       name,
       description,
@@ -81,6 +94,7 @@ export default function DataIngestionPage() {
       },
     });
     resetForm();
+    showSuccess("RAG profile saved.");
   };
 
   const toggleKnowledge = (id: string) => {
@@ -88,35 +102,39 @@ export default function DataIngestionPage() {
   };
 
   return (
-    <div className="mx-auto max-w-6xl px-6 py-10">
-      <header className="border-b border-neutral-200 pb-6">
-        <h1 className="text-2xl font-semibold tracking-tight text-neutral-900">Data ingestion (RAG)</h1>
-        <p className="mt-1 text-sm text-neutral-600">
-          Configure retrieval profiles for LanceDB (single vector store). Execution is not run in the browser — this
-          is the config contract for a future worker / LangChain pipeline.
-        </p>
-      </header>
-
-      {modelsErr ? (
-        <p className="mt-4 text-sm text-amber-800">Model list: {modelsErr} (using fallbacks where needed).</p>
-      ) : null}
-
+    <PageChrome
+      title="Data ingestion (RAG)"
+      description="Configure retrieval profiles for LanceDB (single vector store). All data and model names are local to this browser — there is no worker or execution service in this repo."
+    >
       <section className="mt-10 rounded-lg border border-neutral-200 bg-neutral-50/50 p-5">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-neutral-500">New RAG profile</h2>
         <form onSubmit={onCreate} className="mt-4 grid max-w-3xl gap-4">
+          {formErr ? (
+            <p className="text-sm text-red-600" role="alert">
+              {formErr}
+            </p>
+          ) : null}
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
-              <label className="block text-sm font-medium text-neutral-700">Name</label>
+              <label htmlFor={`${formId}-name`} className="block text-sm font-medium text-neutral-700">
+                Name
+              </label>
               <input
+                id={`${formId}-name`}
                 value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
+                onChange={(e) => {
+                  setName(e.target.value);
+                  setFormErr(null);
+                }}
                 className="mt-1 w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-neutral-700">Embedding model (LiteLLM)</label>
+              <label htmlFor={`${formId}-embed`} className="block text-sm font-medium text-neutral-700">
+                Embedding model (bundled catalog)
+              </label>
               <select
+                id={`${formId}-embed`}
                 value={embeddingModel || embedOptions[0]?.id || ""}
                 onChange={(e) => setEmbeddingModel(e.target.value)}
                 disabled={modelsLoading}
@@ -131,8 +149,11 @@ export default function DataIngestionPage() {
             </div>
           </div>
           <div>
-            <label className="block text-sm font-medium text-neutral-700">Description</label>
+            <label htmlFor={`${formId}-description`} className="block text-sm font-medium text-neutral-700">
+              Description
+            </label>
             <textarea
+              id={`${formId}-description`}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={2}
@@ -146,8 +167,9 @@ export default function DataIngestionPage() {
             <ul className="mt-2 max-h-36 space-y-1 overflow-y-auto text-sm">
               {knowledgeItems.map((k: KnowledgeItem) => (
                 <li key={k.id}>
-                  <label className="flex cursor-pointer items-center gap-2">
+                  <label htmlFor={`${formId}-ks-${k.id}`} className="flex cursor-pointer items-center gap-2">
                     <input
+                      id={`${formId}-ks-${k.id}`}
                       type="checkbox"
                       checked={knowledgeItemIds.includes(k.id)}
                       onChange={() => toggleKnowledge(k.id)}
@@ -161,8 +183,11 @@ export default function DataIngestionPage() {
 
           <div className="grid gap-4 sm:grid-cols-3">
             <div>
-              <label className="block text-sm font-medium text-neutral-700">Chunk size</label>
+              <label htmlFor={`${formId}-chunk`} className="block text-sm font-medium text-neutral-700">
+                Chunk size
+              </label>
               <input
+                id={`${formId}-chunk`}
                 type="number"
                 min={64}
                 value={chunkSize}
@@ -171,8 +196,11 @@ export default function DataIngestionPage() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-neutral-700">Chunk overlap</label>
+              <label htmlFor={`${formId}-overlap`} className="block text-sm font-medium text-neutral-700">
+                Chunk overlap
+              </label>
               <input
+                id={`${formId}-overlap`}
                 type="number"
                 min={0}
                 value={chunkOverlap}
@@ -181,8 +209,11 @@ export default function DataIngestionPage() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-neutral-700">Text splitter</label>
+              <label htmlFor={`${formId}-splitter`} className="block text-sm font-medium text-neutral-700">
+                Text splitter
+              </label>
               <select
+                id={`${formId}-splitter`}
                 value={splitter}
                 onChange={(e) => setSplitter(e.target.value as TextSplitterKind)}
                 className="mt-1 w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm"
@@ -202,16 +233,27 @@ export default function DataIngestionPage() {
           <fieldset className="rounded-md border border-neutral-200 bg-white p-3">
             <legend className="text-sm font-medium text-neutral-800">Retrieval</legend>
             <div className="mt-2 flex flex-wrap gap-4 text-sm">
-              <label className="flex items-center gap-2">
-                <input type="checkbox" checked={retrievalSemantic} onChange={(e) => setRetrievalSemantic(e.target.checked)} />
+              <label htmlFor={`${formId}-ret-semantic`} className="flex items-center gap-2">
+                <input
+                  id={`${formId}-ret-semantic`}
+                  type="checkbox"
+                  checked={retrievalSemantic}
+                  onChange={(e) => setRetrievalSemantic(e.target.checked)}
+                />
                 Semantic search
               </label>
-              <label className="flex items-center gap-2">
-                <input type="checkbox" checked={retrievalHybrid} onChange={(e) => setRetrievalHybrid(e.target.checked)} />
+              <label htmlFor={`${formId}-ret-hybrid`} className="flex items-center gap-2">
+                <input
+                  id={`${formId}-ret-hybrid`}
+                  type="checkbox"
+                  checked={retrievalHybrid}
+                  onChange={(e) => setRetrievalHybrid(e.target.checked)}
+                />
                 Hybrid search
               </label>
-              <label className="flex items-center gap-2">
+              <label htmlFor={`${formId}-ret-meta`} className="flex items-center gap-2">
                 <input
+                  id={`${formId}-ret-meta`}
                   type="checkbox"
                   checked={retrievalMetadata}
                   onChange={(e) => setRetrievalMetadata(e.target.checked)}
@@ -222,8 +264,11 @@ export default function DataIngestionPage() {
             {retrievalHybrid ? (
               <div className="mt-4 grid gap-3 border-t border-neutral-100 pt-3 sm:grid-cols-2">
                 <div>
-                  <label className="text-xs font-medium text-neutral-600">Hybrid alpha (BM25 vs dense)</label>
+                  <label htmlFor={`${formId}-hybrid-alpha`} className="text-xs font-medium text-neutral-600">
+                    Hybrid alpha (BM25 vs dense)
+                  </label>
                   <input
+                    id={`${formId}-hybrid-alpha`}
                     type="number"
                     step={0.05}
                     min={0}
@@ -233,12 +278,22 @@ export default function DataIngestionPage() {
                     className="mt-1 w-full rounded border px-2 py-1 text-sm"
                   />
                 </div>
-                <label className="flex items-center gap-2 text-sm">
-                  <input type="checkbox" checked={hybridDedup} onChange={(e) => setHybridDedup(e.target.checked)} />
+                <label htmlFor={`${formId}-hybrid-dedup`} className="flex items-center gap-2 text-sm">
+                  <input
+                    id={`${formId}-hybrid-dedup`}
+                    type="checkbox"
+                    checked={hybridDedup}
+                    onChange={(e) => setHybridDedup(e.target.checked)}
+                  />
                   Deduplicate hybrid hits
                 </label>
-                <label className="flex items-center gap-2 text-sm">
-                  <input type="checkbox" checked={hybridRrf} onChange={(e) => setHybridRrf(e.target.checked)} />
+                <label htmlFor={`${formId}-hybrid-rrf`} className="flex items-center gap-2 text-sm">
+                  <input
+                    id={`${formId}-hybrid-rrf`}
+                    type="checkbox"
+                    checked={hybridRrf}
+                    onChange={(e) => setHybridRrf(e.target.checked)}
+                  />
                   Reciprocal rank fusion
                 </label>
               </div>
@@ -246,23 +301,34 @@ export default function DataIngestionPage() {
           </fieldset>
 
           <fieldset className="rounded-md border border-neutral-200 bg-white p-3">
-            <legend className="text-sm font-medium text-neutral-800">Re-ranking (LiteLLM)</legend>
-            <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={useReranker} onChange={(e) => setUseReranker(e.target.checked)} />
-              Use Cohere / rerank model via LiteLLM
+            <legend className="text-sm font-medium text-neutral-800">Re-ranking (bundled catalog)</legend>
+            <label htmlFor={`${formId}-use-rerank`} className="flex items-center gap-2 text-sm">
+              <input
+                id={`${formId}-use-rerank`}
+                type="checkbox"
+                checked={useReranker}
+                onChange={(e) => setUseReranker(e.target.checked)}
+              />
+              Demo reranker slot — labels come from the bundled catalog only
             </label>
             {useReranker ? (
-              <select
-                value={rerankModel || rerankOptions[0]?.id || ""}
-                onChange={(e) => setRerankModel(e.target.value)}
-                className="mt-2 w-full max-w-md rounded-md border border-neutral-300 px-3 py-2 text-sm"
-              >
+              <>
+                <label htmlFor={`${formId}-rerank-model`} className="mt-2 block text-xs font-medium text-neutral-600">
+                  Rerank model
+                </label>
+                <select
+                  id={`${formId}-rerank-model`}
+                  value={rerankModel || rerankOptions[0]?.id || ""}
+                  onChange={(e) => setRerankModel(e.target.value)}
+                  className="mt-1 w-full max-w-md rounded-md border border-neutral-300 px-3 py-2 text-sm"
+                >
                 {rerankOptions.map((m) => (
                   <option key={m.id} value={m.id}>
                     {m.label}
                   </option>
                 ))}
               </select>
+              </>
             ) : null}
           </fieldset>
 
@@ -290,7 +356,10 @@ export default function DataIngestionPage() {
                   <button
                     type="button"
                     className="text-xs text-red-700 underline"
-                    onClick={() => deleteRagProfile(p.id, username, isAdmin)}
+                    onClick={() => {
+                      deleteRagProfile(p.id, username, isAdmin);
+                      showSuccess("RAG profile removed.");
+                    }}
                   >
                     Delete
                   </button>
@@ -300,6 +369,6 @@ export default function DataIngestionPage() {
           ))}
         </ul>
       </section>
-    </div>
+    </PageChrome>
   );
 }

@@ -1,5 +1,7 @@
-import { type MouseEvent, useCallback, useEffect, useRef, useState } from "react";
+import { type MouseEvent, useCallback, useEffect, useId, useRef, useState } from "react";
 
+import { AssistantMessageContent } from "../components/AssistantMessageContent";
+import { Breadcrumbs } from "../components/Breadcrumbs";
 import { workflowById } from "../lib/workflowCatalog";
 import { useWorkflowCatalog } from "../lib/useWorkflowCatalog";
 import {
@@ -31,6 +33,7 @@ async function mockAssistantReply(workflowName: string, userMessage: string): Pr
 }
 
 export default function ChatPage() {
+  const formId = useId();
   const workflows = useWorkflowCatalog();
   const [workflowId, setWorkflowId] = useState(() => workflows[0]?.id ?? "");
 
@@ -122,9 +125,12 @@ export default function ChatPage() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-white">
-      <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-center text-xs text-amber-950">
-        Chat uses mock replies. Agent, pipeline, and RAG definitions are saved in the browser only — execution is not
-        wired to LangChain or execution-service.
+      <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-center text-xs text-amber-950 sm:px-6">
+        Chat uses mock replies. Agent, pipeline, and RAG definitions are saved in the browser only — nothing is sent to a
+        remote execution or API service.
+      </div>
+      <div className="border-b border-neutral-200 bg-white px-4 py-2 sm:px-6">
+        <Breadcrumbs />
       </div>
       <div className="flex min-h-0 min-h-[480px] flex-1 flex-col md:flex-row">
         {/* Conversations */}
@@ -148,7 +154,7 @@ export default function ChatPage() {
                   <li key={c.id}>
                     <div
                       className={[
-                        "group flex items-start gap-1 rounded-md text-left text-sm",
+                        "flex items-start gap-1 rounded-md text-left text-sm",
                         selected ? "bg-neutral-900 text-white" : "text-neutral-800 hover:bg-neutral-200/60",
                       ].join(" ")}
                     >
@@ -160,11 +166,12 @@ export default function ChatPage() {
                       </button>
                       <button
                         type="button"
-                        title="Delete"
+                        title="Delete conversation"
+                        aria-label={`Delete conversation: ${c.title}`}
                         onClick={(e) => onDeleteConv(c.id, e)}
                         className={[
-                          "shrink-0 rounded p-2 opacity-0 transition group-hover:opacity-100",
-                          selected ? "hover:bg-white/10" : "hover:bg-neutral-300/50",
+                          "shrink-0 rounded p-2 text-neutral-500 hover:text-neutral-900",
+                          selected ? "text-neutral-300 hover:bg-white/10 hover:text-white" : "hover:bg-neutral-300/50",
                         ].join(" ")}
                       >
                         <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
@@ -182,9 +189,12 @@ export default function ChatPage() {
         {/* Thread */}
         <section className="flex min-w-0 flex-1 flex-col">
           <div className="border-b border-neutral-200 bg-white px-4 py-3">
-            <label className="block text-xs font-medium uppercase tracking-wide text-neutral-500">Workflow</label>
+            <label htmlFor={`${formId}-workflow`} className="block text-xs font-medium uppercase tracking-wide text-neutral-500">
+              Workflow
+            </label>
             <select
-              className="mt-1 max-w-md rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 focus:border-neutral-900 focus:outline-none focus:ring-1 focus:ring-neutral-900"
+              id={`${formId}-workflow`}
+              className="mt-1 max-w-md rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900"
               value={workflowId}
               onChange={(e) => setWorkflowId(e.target.value)}
             >
@@ -222,7 +232,11 @@ export default function ChatPage() {
                         m.role === "user" ? "bg-neutral-900 text-white" : "border border-neutral-200 bg-white text-neutral-900",
                       ].join(" ")}
                     >
-                      <pre className="whitespace-pre-wrap font-sans">{m.content}</pre>
+                      {m.role === "user" ? (
+                        <pre className="whitespace-pre-wrap font-sans">{m.content}</pre>
+                      ) : (
+                        <AssistantMessageContent text={m.content} />
+                      )}
                     </div>
                   </div>
                 ))}
@@ -240,13 +254,17 @@ export default function ChatPage() {
 
           <div className="border-t border-neutral-200 bg-white p-4">
             <div className="mx-auto flex max-w-3xl gap-2">
+              <label htmlFor={`${formId}-message`} className="sr-only">
+                Message
+              </label>
               <textarea
+                id={`${formId}-message`}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 placeholder={active ? "Message…" : "Type a message to start this workflow…"}
                 disabled={pending}
                 rows={2}
-                className="min-h-[44px] flex-1 resize-none rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 placeholder:text-neutral-400 focus:border-neutral-900 focus:outline-none focus:ring-1 focus:ring-neutral-900 disabled:bg-neutral-100"
+                className="min-h-[44px] flex-1 resize-none rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 placeholder:text-neutral-400 disabled:bg-neutral-100"
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();

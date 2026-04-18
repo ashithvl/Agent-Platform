@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 
 import { useAuth } from "../auth/AuthContext";
+import { PageChrome } from "../components/PageChrome";
 import { AGENT_SPECS_CHANGED, listAgentSpecs } from "../lib/agentSpecStorage";
 import { useSyncedList } from "../lib/useSyncedList";
 import { useWorkflowCatalog } from "../lib/useWorkflowCatalog";
@@ -14,10 +15,29 @@ export default function Dashboard() {
     realmRoles.has("api_access") || realmRoles.has("admin") || realmRoles.has("platform-admin");
 
   return (
-    <div className="mx-auto max-w-6xl px-6 py-10">
-      <div className="border-b border-neutral-200 pb-6">
-        <h1 className="text-2xl font-semibold tracking-tight text-neutral-900">Dashboard</h1>
-        <p className="mt-1 text-sm text-neutral-600">Overview of your AI workspace — demo data, stored locally.</p>
+    <PageChrome title="Dashboard" description="Overview of your AI workspace — demo data, stored locally.">
+      {!isBuilder ? (
+        <div
+          className="mt-6 rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm leading-relaxed text-sky-950"
+          role="status"
+        >
+          <strong className="font-semibold">Role-based sidebar:</strong> Agents, workflows, knowledge, tools, and data
+          ingestion only appear when your account has the <span className="font-medium">builder</span>,{" "}
+          <span className="font-medium">admin</span>, or <span className="font-medium">platform-admin</span> role. Open{" "}
+          <Link className="font-medium underline-offset-4 hover:underline" to="/settings">
+            Settings
+          </Link>{" "}
+          to see your roles, or use a demo user that includes builder to explore the full catalog.
+        </div>
+      ) : null}
+
+      <div
+        className="mt-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-relaxed text-amber-950"
+        role="note"
+      >
+        <strong className="font-semibold">Cost and traffic tiles are not real telemetry.</strong> The dollar and
+        request figures below are <strong>static placeholders</strong> for layout demos only — they are not wired to
+        billing or any remote backend. Workflow and agent counts come from data stored in this browser.
       </div>
 
       <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -27,8 +47,18 @@ export default function Dashboard() {
           value={String(agentSpecs.filter((a) => a.status === "active").length)}
           hint="Configured in Agents"
         />
-        <MetricCard label="Est. cost (7d)" value="$482.10" hint="Mock aggregate" />
-        <MetricCard label="Requests (24h)" value="12.4k" hint="Mock traffic" />
+        <MetricCard
+          label="Est. cost (7d)"
+          value="$482.10"
+          hint="Illustration only — not billing or usage data"
+          demoFigures
+        />
+        <MetricCard
+          label="Requests (24h)"
+          value="12.4k"
+          hint="Illustration only — not production traffic"
+          demoFigures
+        />
       </div>
 
       <div className="mt-10 grid gap-8 lg:grid-cols-2">
@@ -40,6 +70,12 @@ export default function Dashboard() {
                 Open chat
               </Link>
               <span className="text-neutral-600"> — Pick a workflow and continue a thread.</span>
+            </li>
+            <li>
+              <Link className="font-medium text-neutral-900 underline-offset-4 hover:underline" to="/telemetry">
+                Telemetry
+              </Link>
+              <span className="text-neutral-600"> — Mock usage by account, agent, and workflow.</span>
             </li>
             {isBuilder ? (
               <>
@@ -80,16 +116,39 @@ export default function Dashboard() {
           </dl>
         </section>
       </div>
-    </div>
+    </PageChrome>
   );
 }
 
-function MetricCard({ label, value, hint }: { label: string; value: string; hint: string }) {
+function MetricCard({
+  label,
+  value,
+  hint,
+  demoFigures,
+}: {
+  label: string;
+  value: string;
+  hint: string;
+  /** Stronger visual cue that the value is fictional (cost / traffic demos). */
+  demoFigures?: boolean;
+}) {
   return (
-    <div className="rounded-lg border border-neutral-200 bg-white p-4 shadow-sm">
-      <p className="text-xs font-medium uppercase tracking-wide text-neutral-500">{label}</p>
+    <div
+      className={[
+        "rounded-lg border p-4 shadow-sm",
+        demoFigures ? "border-amber-200 bg-amber-50/70" : "border-neutral-200 bg-white",
+      ].join(" ")}
+    >
+      <div className="flex flex-wrap items-center gap-2">
+        <p className="text-xs font-medium uppercase tracking-wide text-neutral-500">{label}</p>
+        {demoFigures ? (
+          <span className="rounded border border-amber-300 bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-950">
+            Demo only
+          </span>
+        ) : null}
+      </div>
       <p className="mt-2 text-2xl font-semibold tabular-nums text-neutral-900">{value}</p>
-      <p className="mt-1 text-xs text-neutral-500">{hint}</p>
+      <p className="mt-1 text-xs text-neutral-600">{hint}</p>
     </div>
   );
 }

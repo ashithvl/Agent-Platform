@@ -1,5 +1,8 @@
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 
+import { useFlash } from "../components/FlashContext";
+import { PageChrome } from "../components/PageChrome";
 import { isCustomWorkflow } from "../lib/workflowStorage";
 import { apiKeyForWorkflow, mockInvokeUrl } from "../lib/mockApiKey";
 import { useWorkflowCatalog } from "../lib/useWorkflowCatalog";
@@ -7,6 +10,7 @@ import { useWorkflowCatalog } from "../lib/useWorkflowCatalog";
 const defaultBase = import.meta.env.VITE_MOCK_API_BASE ?? "https://api.enterprise-ai.local/v1";
 
 export default function ApiAccessPage() {
+  const baseUrlFieldId = useId();
   const workflows = useWorkflowCatalog();
   const [base, setBase] = useState(defaultBase);
   const [openId, setOpenId] = useState<string | null>(workflows[0]?.id ?? null);
@@ -23,88 +27,131 @@ export default function ApiAccessPage() {
   );
 
   return (
-    <div className="mx-auto max-w-6xl px-6 py-10">
-      <header className="border-b border-neutral-200 pb-6">
-        <h1 className="text-2xl font-semibold tracking-tight text-neutral-900">API access</h1>
-        <p className="mt-1 text-sm text-neutral-600">
+    <PageChrome
+      title="API access"
+      description={
+        <>
           Every workflow has a dedicated invoke URL and API key. Use the key in the{" "}
           <code className="rounded bg-neutral-100 px-1 text-xs">Authorization: Bearer</code> header.
-        </p>
-      </header>
-
+        </>
+      }
+    >
       <div className="mt-6 max-w-xl">
-        <label className="block text-sm font-medium text-neutral-700">API base URL</label>
+        <label htmlFor={baseUrlFieldId} className="block text-sm font-medium text-neutral-700">
+          API base URL
+        </label>
         <input
+          id={baseUrlFieldId}
           type="url"
-          className="mt-1 w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 focus:border-neutral-900 focus:outline-none focus:ring-1 focus:ring-neutral-900"
+          className="mt-1 w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900"
           value={base}
           onChange={(e) => setBase(e.target.value)}
         />
       </div>
 
-      <div className="mt-8 space-y-4">
-        {rows.map(({ workflow: w, url, key, custom }) => (
-          <article key={w.id} className="rounded-lg border border-neutral-200 bg-white shadow-sm">
-            <button
-              type="button"
-              onClick={() => setOpenId((v) => (v === w.id ? null : w.id))}
-              className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-neutral-50"
-            >
-              <span className="flex flex-col gap-0.5">
-                <span className="font-semibold text-neutral-900">{w.name}</span>
-                {custom ? (
-                  <span className="text-[11px] text-neutral-500">Developer workflow · created by {w.createdBy}</span>
-                ) : (
-                  <span className="text-[11px] text-neutral-500">System workflow</span>
-                )}
-              </span>
-              <span className="text-xs text-neutral-500">{openId === w.id ? "Hide" : "Show credentials"}</span>
-            </button>
-            {openId === w.id ? (
-              <div className="space-y-3 border-t border-neutral-200 px-4 py-4 text-sm">
-                <div>
-                  <span className="text-xs font-medium uppercase tracking-wide text-neutral-500">Invoke URL</span>
-                  <div className="mt-1 flex gap-2">
-                    <code className="flex-1 break-all rounded bg-neutral-100 px-2 py-2 text-neutral-800">{url}</code>
-                    <CopyButton text={url} />
+      {rows.length === 0 ? (
+        <div className="mt-8 rounded-lg border border-dashed border-neutral-300 bg-neutral-50/80 px-6 py-12 text-center">
+          <p className="text-sm font-semibold text-neutral-900">No workflows to show keys for</p>
+          <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-neutral-600">
+            Invoke URLs and API keys are listed per workflow. If your catalog is empty, add a runtime flow under
+            Workflows (or restore seed data) — then return here.
+          </p>
+          <Link
+            to="/workflows"
+            className="mt-6 inline-flex rounded-md bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-neutral-800"
+          >
+            Go to workflows
+          </Link>
+        </div>
+      ) : (
+        <div className="mt-8 space-y-4">
+          {rows.map(({ workflow: w, url, key, custom }) => (
+            <article key={w.id} className="rounded-lg border border-neutral-200 bg-white shadow-sm">
+              <button
+                type="button"
+                onClick={() => setOpenId((v) => (v === w.id ? null : w.id))}
+                className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-neutral-50"
+              >
+                <span className="flex flex-col gap-0.5">
+                  <span className="font-semibold text-neutral-900">{w.name}</span>
+                  {custom ? (
+                    <span className="text-[11px] text-neutral-500">Developer workflow · created by {w.createdBy}</span>
+                  ) : (
+                    <span className="text-[11px] text-neutral-500">System workflow</span>
+                  )}
+                </span>
+                <span className="text-xs text-neutral-500">{openId === w.id ? "Hide" : "Show credentials"}</span>
+              </button>
+              {openId === w.id ? (
+                <div className="space-y-3 border-t border-neutral-200 px-4 py-4 text-sm">
+                  <div>
+                    <span className="text-xs font-medium uppercase tracking-wide text-neutral-500">Invoke URL</span>
+                    <div className="mt-1 flex gap-2">
+                      <code className="flex-1 break-all rounded bg-neutral-100 px-2 py-2 text-neutral-800">{url}</code>
+                      <CopyButton text={url} />
+                    </div>
                   </div>
-                </div>
-                <div>
-                  <span className="text-xs font-medium uppercase tracking-wide text-neutral-500">API key (this flow)</span>
-                  <div className="mt-1 flex gap-2">
-                    <code className="flex-1 break-all rounded bg-neutral-100 px-2 py-2 text-neutral-800">{key}</code>
-                    <CopyButton text={key} />
+                  <div>
+                    <span className="text-xs font-medium uppercase tracking-wide text-neutral-500">API key (this flow)</span>
+                    <div className="mt-1 flex gap-2">
+                      <code className="flex-1 break-all rounded bg-neutral-100 px-2 py-2 text-neutral-800">{key}</code>
+                      <CopyButton text={key} />
+                    </div>
                   </div>
+                  <p className="text-xs text-neutral-500">
+                    Header: <code className="rounded bg-neutral-200 px-1">Authorization: Bearer {`{key}`}</code>
+                  </p>
                 </div>
-                <p className="text-xs text-neutral-500">
-                  Header: <code className="rounded bg-neutral-200 px-1">Authorization: Bearer {`{key}`}</code>
-                </p>
-              </div>
-            ) : null}
-          </article>
-        ))}
-      </div>
-    </div>
+              ) : null}
+            </article>
+          ))}
+        </div>
+      )}
+    </PageChrome>
   );
 }
 
 function CopyButton({ text }: { text: string }) {
+  const { showError } = useFlash();
   const [done, setDone] = useState(false);
+  const [inlineErr, setInlineErr] = useState<string | null>(null);
+
+  const runCopy = async () => {
+    setInlineErr(null);
+    if (!navigator.clipboard || typeof navigator.clipboard.writeText !== "function") {
+      const msg =
+        "Clipboard API is unavailable (try HTTPS, or copy the value manually from the gray box).";
+      showError(msg);
+      setInlineErr(msg);
+      window.setTimeout(() => setInlineErr(null), 8000);
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      setDone(true);
+      window.setTimeout(() => setDone(false), 2000);
+    } catch {
+      const msg = "Could not copy — allow clipboard permission for this site, or select the text and copy manually.";
+      showError(msg);
+      setInlineErr(msg);
+      window.setTimeout(() => setInlineErr(null), 8000);
+    }
+  };
+
   return (
-    <button
-      type="button"
-      className="shrink-0 rounded-md border border-neutral-300 bg-white px-3 py-2 text-xs font-medium text-neutral-800 hover:bg-neutral-100"
-      onClick={async () => {
-        try {
-          await navigator.clipboard.writeText(text);
-          setDone(true);
-          window.setTimeout(() => setDone(false), 2000);
-        } catch {
-          /* ignore */
-        }
-      }}
-    >
-      {done ? "Copied" : "Copy"}
-    </button>
+    <div className="flex shrink-0 flex-col items-stretch gap-1">
+      <button
+        type="button"
+        className="rounded-md border border-neutral-300 bg-white px-3 py-2 text-xs font-medium text-neutral-800 hover:bg-neutral-100"
+        onClick={() => void runCopy()}
+      >
+        {done ? "Copied" : "Copy"}
+      </button>
+      {inlineErr ? (
+        <p className="max-w-[11rem] text-right text-[11px] leading-snug text-red-700" role="alert">
+          {inlineErr}
+        </p>
+      ) : null}
+    </div>
   );
 }

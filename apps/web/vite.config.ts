@@ -6,16 +6,5 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
     port: 5173,
-    proxy: {
-      "/api": {
-        target: "http://localhost:8000",
-        changeOrigin: true,
-      },
-      "/litellm": {
-        target: "http://localhost:4000",
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/litellm/, ""),
-      },
-    },
   },
 });

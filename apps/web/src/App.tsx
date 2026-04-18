@@ -1,5 +1,7 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 
+import NotFoundPage from "./pages/NotFoundPage";
+
 import { RequireAuth } from "./auth/RequireAuth";
 import { RoleRoute } from "./auth/RoleRoute";
 import AppShell from "./layouts/AppShell";
@@ -101,18 +103,11 @@ export default function App() {
               </RoleRoute>
             }
           />
-          <Route
-            path="/telemetry"
-            element={
-              <RoleRoute anyOf={[...adminPlus]}>
-                <TelemetryPage />
-              </RoleRoute>
-            }
-          />
+          <Route path="/telemetry" element={<TelemetryPage />} />
         </Route>
       </Route>
 
-      <Route path="*" element={<Navigate to="/" replace />} />
+      <Route path="*" element={<NotFoundPage />} />
     </Routes>
   );
 }

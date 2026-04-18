@@ -1,5 +1,6 @@
 import { Navigate, Outlet } from "react-router-dom";
 
+import { PageBusy } from "../components/PageBusy";
 import { useAuth } from "./AuthContext";
 
 /** Gate that requires a logged-in user; renders nested routes via `<Outlet />`. */
@@ -7,11 +8,7 @@ export function RequireAuth() {
   const { user, loading } = useAuth();
 
   if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-white">
-        <div className="text-sm text-neutral-500">Loading…</div>
-      </div>
-    );
+    return <PageBusy message="Restoring your session…" layout="fullscreen" />;
   }
 
   if (!user) {
