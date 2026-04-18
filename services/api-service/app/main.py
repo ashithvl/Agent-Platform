@@ -7,10 +7,8 @@ Responsibilities:
   - Proxy LiteLLM (never leaking the master key).
   - Serve telemetry/cost rollups written by worker-service.
 """
-from __future__ import annotations
-
 from datetime import date, timedelta
-from typing import Any, Iterable, Literal
+from typing import Any, Iterable, List, Literal, Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -200,7 +198,7 @@ class TelemetryRow(BaseModel):
 
 
 class TelemetrySummary(BaseModel):
-    dimension: Dimension
+    dimension: Literal["user", "agent", "workflow"]
     from_date: date
     to_date: date
     total_requests: int
@@ -208,7 +206,7 @@ class TelemetrySummary(BaseModel):
     rows: list[TelemetryRow]
 
 
-def _column_for_dimension(dim: Dimension):
+def _column_for_dimension(dim: str):
     return {
         "user": UsageDaily.user_id,
         "agent": UsageDaily.agent_id,
@@ -220,7 +218,7 @@ def _column_for_dimension(dim: Dimension):
 @limiter.limit("60/minute")
 def telemetry_summary(
     request: Request,
-    dimension: Dimension = "user",
+    dimension: Literal["user", "agent", "workflow"] = "user",
     from_date: date | None = Query(default=None, alias="from"),
     to_date: date | None = Query(default=None, alias="to"),
     _: TokenClaims = Depends(get_claims),

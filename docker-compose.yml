@@ -145,7 +145,7 @@ services:
         required: false
     environment:
       LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:-sk-dev-master}
-      LITELLM_DATABASE_URL: postgresql://eai:eai@postgres:5432/eai
+      LITELLM_DATABASE_URL: postgresql://eai:eai@postgres:5432/litellm
       # config.yaml references these; empty env can prevent the proxy from starting.
       OPENAI_API_KEY: ${OPENAI_API_KEY:-sk-placeholder-set-real-key-in-infra-litellm-env}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-sk-ant-placeholder-set-real-key-in-infra-litellm-env}
