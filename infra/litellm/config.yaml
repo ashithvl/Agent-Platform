@@ -1,0 +1,33 @@
+# LiteLLM dev config.
+# Set real provider keys in infra/litellm/.env (copy .env.example first).
+# The UI / Settings -> Models page will manage this list at runtime once api-service is wired up;
+# the entries below exist only so `litellm` boots green on a fresh checkout.
+
+# litellm_params.model must include the provider prefix so the router can route
+# (e.g. anthropic/... not bare claude-...). model_name is the alias clients use.
+model_list:
+  - model_name: gpt-4o-mini
+    litellm_params:
+      model: openai/gpt-4o-mini
+      api_key: os.environ/OPENAI_API_KEY
+  - model_name: gpt-4o
+    litellm_params:
+      model: openai/gpt-4o
+      api_key: os.environ/OPENAI_API_KEY
+  - model_name: claude-3-5-sonnet
+    litellm_params:
+      model: anthropic/claude-3-5-sonnet-20241022
+      api_key: os.environ/ANTHROPIC_API_KEY
+  - model_name: text-embedding-3-small
+    litellm_params:
+      model: openai/text-embedding-3-small
+      api_key: os.environ/OPENAI_API_KEY
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+  database_url: os.environ/LITELLM_DATABASE_URL
+  store_model_in_db: true
+
+litellm_settings:
+  drop_params: true
+  telemetry: false

@@ -1,5 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 
+import { BACKEND_ENABLED } from "../lib/apiClient";
+import { backendLogin } from "./backendAuth";
 import { loginLocal } from "./localUsers";
 import { realmRolesFromAccessToken } from "./roles";
 
@@ -65,7 +67,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = useCallback(async (username: string, password: string) => {
     setError(null);
-    const at = loginLocal(username, password);
+    const at = BACKEND_ENABLED ? await backendLogin(username, password) : loginLocal(username, password);
     sessionStorage.setItem(STORAGE_KEY, at);
     const u = userFromAccessToken(at);
     if (!u) {

@@ -7,7 +7,6 @@ import { useAuth } from "./AuthContext";
 const ROLE_DESCRIPTIONS: Record<string, string> = {
   consumer: "Consumer — chat and shared areas",
   builder: "Builder — agents, workflows, knowledge, tools, ingestion",
-  api_access: "API access — invoke URLs and keys",
   admin: "Administrator",
   "platform-admin": "Platform administrator",
 };

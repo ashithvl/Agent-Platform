@@ -1,13 +1,19 @@
-import { type FormEvent, useCallback, useId, useMemo, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useId, useMemo, useState } from "react";
 
 import { useAuth } from "../auth/AuthContext";
+import { backendCreateUser, backendListUsers } from "../auth/backendAuth";
 import { createLocalUser, listUsersPublic, type CreatableRole } from "../auth/localUsers";
 import { Dialog } from "../components/Dialog";
 import { EmptyTablePlaceholder } from "../components/EmptyTablePlaceholder";
 import { useFlash } from "../components/FlashContext";
 import { PageChrome } from "../components/PageChrome";
+import { BudgetsTab } from "../components/settings/BudgetsTab";
+import { KeysTab } from "../components/settings/KeysTab";
+import { ModelsTab } from "../components/settings/ModelsTab";
+import { ObservabilityTab } from "../components/settings/ObservabilityTab";
+import { BACKEND_ENABLED } from "../lib/apiClient";
 
-type SettingsTab = "session" | "people";
+type SettingsTab = "session" | "people" | "models" | "keys" | "budgets" | "observability";
 
 export default function SettingsPage() {
   const { user, realmRoles } = useAuth();
@@ -15,7 +21,9 @@ export default function SettingsPage() {
   const createUserFormId = useId();
   const { showSuccess } = useFlash();
   const [tab, setTab] = useState<SettingsTab>("people");
-  const [users, setUsers] = useState(() => listUsersPublic());
+  const [users, setUsers] = useState<{ username: string; roles: string[]; label: string }[]>(
+    () => (BACKEND_ENABLED ? [] : listUsersPublic()),
+  );
   const [createOpen, setCreateOpen] = useState(false);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -24,7 +32,19 @@ export default function SettingsPage() {
   const [busy, setBusy] = useState(false);
 
   const canManage = realmRoles.has("admin") || realmRoles.has("platform-admin");
-  const refresh = useCallback(() => setUsers(listUsersPublic()), []);
+  const refresh = useCallback(() => {
+    if (BACKEND_ENABLED) {
+      backendListUsers()
+        .then(setUsers)
+        .catch(() => setUsers([]));
+    } else {
+      setUsers(listUsersPublic());
+    }
+  }, []);
+
+  useEffect(() => {
+    if (BACKEND_ENABLED) refresh();
+  }, [refresh]);
 
   const sorted = useMemo(
     () => [...users].sort((a, b) => a.username.localeCompare(b.username, undefined, { sensitivity: "base" })),
@@ -43,13 +63,17 @@ export default function SettingsPage() {
     resetCreateForm();
   };
 
-  const onCreate = (e: FormEvent) => {
+  const onCreate = async (e: FormEvent) => {
     e.preventDefault();
     if (!canManage) return;
     setFormErr(null);
     setBusy(true);
     try {
-      createLocalUser(realmRoles, username, password, role);
+      if (BACKEND_ENABLED) {
+        await backendCreateUser(username, password, role);
+      } else {
+        createLocalUser(realmRoles, username, password, role);
+      }
       refresh();
       showSuccess("User created.");
       closeCreate();
@@ -90,6 +114,10 @@ export default function SettingsPage() {
         <div className="flex flex-wrap gap-1">
           {tabBtn("session", "Session")}
           {tabBtn("people", "People")}
+          {canManage ? tabBtn("models", "Models") : null}
+          {canManage ? tabBtn("keys", "Virtual keys") : null}
+          {canManage ? tabBtn("budgets", "Budgets") : null}
+          {canManage ? tabBtn("observability", "Observability") : null}
         </div>
       </div>
 
@@ -132,10 +160,20 @@ export default function SettingsPage() {
             <div>
               <h2 className="text-sm font-semibold uppercase tracking-wide text-neutral-500">All users</h2>
               <p className="mt-1 text-sm text-neutral-600">
-                Accounts in <code className="rounded bg-neutral-100 px-1 text-xs">localStorage</code>. Seeded:{" "}
-                <code className="text-xs">admin</code>/<code className="text-xs">admin</code>,{" "}
-                <code className="text-xs">developer</code>/<code className="text-xs">developer</code>,{" "}
-                <code className="text-xs">user</code>/<code className="text-xs">user</code>.
+                {BACKEND_ENABLED ? (
+                  <>
+                    Accounts from <code className="rounded bg-neutral-100 px-1 text-xs">auth-service</code>. Seeded:{" "}
+                    <code className="text-xs">admin</code>, <code className="text-xs">developer</code>,{" "}
+                    <code className="text-xs">user</code>.
+                  </>
+                ) : (
+                  <>
+                    Accounts in <code className="rounded bg-neutral-100 px-1 text-xs">localStorage</code>. Seeded:{" "}
+                    <code className="text-xs">admin</code>/<code className="text-xs">admin</code>,{" "}
+                    <code className="text-xs">developer</code>/<code className="text-xs">developer</code>,{" "}
+                    <code className="text-xs">user</code>/<code className="text-xs">user</code>.
+                  </>
+                )}
               </p>
             </div>
             {canManage ? (
@@ -190,6 +228,54 @@ export default function SettingsPage() {
         </section>
       </div>
 
+      {canManage ? (
+        <>
+          <div
+            role="tabpanel"
+            id={`${tabsId}-panel-models`}
+            aria-labelledby={`${tabsId}-models`}
+            hidden={tab !== "models"}
+            tabIndex={-1}
+            className="mt-8 outline-none"
+          >
+            <ModelsTab />
+          </div>
+
+          <div
+            role="tabpanel"
+            id={`${tabsId}-panel-keys`}
+            aria-labelledby={`${tabsId}-keys`}
+            hidden={tab !== "keys"}
+            tabIndex={-1}
+            className="mt-8 outline-none"
+          >
+            <KeysTab />
+          </div>
+
+          <div
+            role="tabpanel"
+            id={`${tabsId}-panel-budgets`}
+            aria-labelledby={`${tabsId}-budgets`}
+            hidden={tab !== "budgets"}
+            tabIndex={-1}
+            className="mt-8 outline-none"
+          >
+            <BudgetsTab />
+          </div>
+
+          <div
+            role="tabpanel"
+            id={`${tabsId}-panel-observability`}
+            aria-labelledby={`${tabsId}-observability`}
+            hidden={tab !== "observability"}
+            tabIndex={-1}
+            className="mt-8 outline-none"
+          >
+            <ObservabilityTab />
+          </div>
+        </>
+      ) : null}
+
       <Dialog open={createOpen} onClose={closeCreate} title="Create user" description="Stored in this browser only — demo accounts." size="md">
         <form onSubmit={onCreate} className="grid gap-4">
           <div>
@@ -236,9 +322,9 @@ export default function SettingsPage() {
               onChange={(e) => setRole(e.target.value as CreatableRole)}
               className="mt-1 w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm"
             >
-              <option value="user">User — Full workspace, no API keys</option>
-              <option value="developer">Developer — Workspace builder; no API access in this demo</option>
-              <option value="admin">Admin — Full access</option>
+              <option value="user">User — Full workspace access</option>
+              <option value="developer">Developer — Workspace builder</option>
+              <option value="admin">Admin — Full access incl. Settings</option>
             </select>
           </div>
           {formErr ? (

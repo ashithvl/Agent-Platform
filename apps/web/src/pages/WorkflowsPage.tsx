@@ -18,8 +18,6 @@ export default function WorkflowsPage() {
   const workflows = useWorkflowCatalog();
   const username = user?.profile.preferred_username ?? user?.sub ?? "";
   const isAdmin = realmRoles.has("admin") || realmRoles.has("platform-admin");
-  const canSeeApiKeys =
-    realmRoles.has("api_access") || realmRoles.has("admin") || realmRoles.has("platform-admin");
 
   const onCreate = () => {
     const w = createWorkflow(username, "Untitled workflow", "");
@@ -29,14 +27,9 @@ export default function WorkflowsPage() {
   };
 
   const onDelete = (id: string) => {
-    if (
-      !window.confirm(
-        canSeeApiKeys
-          ? "Remove this workflow? API keys for this id will stop resolving under API access."
-          : "Remove this workflow? It will disappear from Chat and the catalog.",
-      )
-    )
+    if (!window.confirm("Remove this workflow? It will disappear from Chat and the catalog.")) {
       return;
+    }
     if (deleteCustomWorkflow(id, username, isAdmin)) {
       notifyWorkflowCatalogChanged();
       showSuccess("Workflow removed.");

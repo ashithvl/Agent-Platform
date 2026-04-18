@@ -17,9 +17,9 @@ function initialsFromName(raw: string | undefined): string {
   return part.slice(0, 2).toUpperCase();
 }
 
-function roleBadge(roles: Set<string>): string {
+function roleBadge(roles: Set<string>, username: string | undefined): string {
   if (roles.has("platform-admin") || roles.has("admin")) return "Admin";
-  if (roles.has("api_access")) return "Developer";
+  if (username?.toLowerCase() === "developer") return "Developer";
   if (roles.has("builder")) return "Builder";
   return "Member";
 }
@@ -40,7 +40,7 @@ export default function AppShell() {
   }, [realmRoles]);
 
   const displayName = formatDisplayName(user?.profile.preferred_username ?? user?.sub);
-  const badge = roleBadge(realmRoles);
+  const badge = roleBadge(realmRoles, user?.profile.preferred_username ?? user?.sub);
 
   return (
     <div className="flex min-h-0 w-full flex-1 overflow-hidden bg-neutral-50 text-neutral-900">

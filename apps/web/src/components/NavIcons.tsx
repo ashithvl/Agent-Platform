@@ -6,7 +6,6 @@ export type NavIconName =
   | "dash"
   | "agents"
   | "flow"
-  | "api"
   | "book"
   | "wrench"
   | "layers"
@@ -33,12 +32,6 @@ export function NavIcon({ name }: { name: NavIconName }): ReactNode {
       return (
         <svg className={cls} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
-        </svg>
-      );
-    case "api":
-      return (
-        <svg className={cls} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
         </svg>
       );
     case "book":

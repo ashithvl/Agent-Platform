@@ -159,7 +159,7 @@ export default function WorkflowEditorPage() {
   }
 
   return (
-    <PageChrome showTitle={false}>
+    <PageChrome title="Workflow editor" showTitle={false}>
       <div className="flex min-h-0 flex-1 flex-col gap-4">
         <header className="shrink-0 border-b border-neutral-200 pb-4">
           <div className="flex flex-wrap items-start justify-between gap-3">

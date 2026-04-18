@@ -12,8 +12,6 @@ export default function Dashboard() {
   const workflows = useWorkflowCatalog();
   const agentSpecs = useSyncedList(AGENT_SPECS_CHANGED, listAgentSpecs);
   const isBuilder = realmRoles.has("builder") || realmRoles.has("admin") || realmRoles.has("platform-admin");
-  const canSeeApiKeys =
-    realmRoles.has("api_access") || realmRoles.has("admin") || realmRoles.has("platform-admin");
 
   return (
     <PageChrome title="Dashboard" description="Overview of your AI workspace — demo data, stored locally.">
@@ -80,22 +78,12 @@ export default function Dashboard() {
               <span className="text-neutral-600"> — Mock usage by account, agent, and workflow.</span>
             </li>
             {isBuilder ? (
-              <>
-                <li>
-                  <Link className="font-medium text-neutral-900 underline-offset-4 hover:underline" to="/knowledge">
-                    Knowledge hub
-                  </Link>
-                  <span className="text-neutral-600"> — Hubs, audiences, and approvals.</span>
-                </li>
-                {canSeeApiKeys ? (
-                  <li>
-                    <Link className="font-medium text-neutral-900 underline-offset-4 hover:underline" to="/api-access">
-                      API access
-                    </Link>
-                    <span className="text-neutral-600"> — Keys and invoke URLs per workflow.</span>
-                  </li>
-                ) : null}
-              </>
+              <li>
+                <Link className="font-medium text-neutral-900 underline-offset-4 hover:underline" to="/knowledge">
+                  Knowledge hub
+                </Link>
+                <span className="text-neutral-600"> — Hubs, audiences, and approvals.</span>
+              </li>
             ) : null}
           </ul>
         </section>

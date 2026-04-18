@@ -1,0 +1,38 @@
+# Shared Dockerfile for Python FastAPI / TaskIQ services.
+# Uses `uv` (https://github.com/astral-sh/uv) for all installs - faster and
+# fully reproducible. Build args let each service pick its own package and
+# entrypoint module.
+FROM python:3.11-slim AS base
+
+ARG SERVICE_DIR
+ARG APP_MODULE=app.main:app
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    UV_LINK_MODE=copy \
+    UV_COMPILE_BYTECODE=1 \
+    UV_SYSTEM_PYTHON=1
+
+WORKDIR /code
+
+# Bring `uv` in via its single-binary container; no pip on the path.
+COPY --from=ghcr.io/astral-sh/uv:0.5.11 /uv /uvx /usr/local/bin/
+
+# Shared library first so it can be cached independently.
+COPY libs/python/ /code/libs/python/
+RUN uv pip install --system /code/libs/python
+
+# Service-specific deps + source.
+COPY ${SERVICE_DIR}/requirements.txt /code/service/requirements.txt
+RUN uv pip install --system -r /code/service/requirements.txt
+
+# Catch wrong/stale images early: TaskIQ workers must import taskiq after install.
+RUN if echo "${SERVICE_DIR}" | grep -qE '(worker-service|ingestion-worker)$'; then \
+      /usr/local/bin/python -c "import taskiq; import taskiq_redis"; \
+    fi
+
+COPY ${SERVICE_DIR}/app /code/service/app
+WORKDIR /code/service
+
+ENV APP_MODULE=${APP_MODULE}
+CMD ["sh", "-c", "uvicorn ${APP_MODULE} --host 0.0.0.0 --port 8000"]

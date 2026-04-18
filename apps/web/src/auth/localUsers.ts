@@ -14,11 +14,11 @@ export type StoredUser = {
 
 export type CreatableRole = "user" | "developer" | "admin";
 
-/** API access (`api_access`) is admin-only in this demo. End users and developers use the workspace without API keys. */
+/** Demo realm roles. Admin gets full access; developer/user share builder capabilities. */
 const ROLE_SET: Record<CreatableRole, string[]> = {
   user: ["consumer", "builder"],
   developer: ["consumer", "builder"],
-  admin: ["platform-admin", "admin", "consumer", "builder", "api_access"],
+  admin: ["platform-admin", "admin", "consumer", "builder"],
 };
 
 /** Canonical demo accounts — always three: admin, developer, user (see `ensureCanonicalSeeds`). */
@@ -32,33 +32,35 @@ function migrateLegacyRoles(users: StoredUser[]): StoredUser[] {
   let changed = false;
   const next = users.map((u) => {
     const name = u.username.toLowerCase();
-    // Old seed: consumer-only "user" → workspace without API
-    if (name === "user" && u.roles.length === 1 && u.roles[0] === "consumer") {
-      changed = true;
-      return { ...u, roles: [...ROLE_SET.user] };
+    let roles = u.roles;
+    let userChanged = false;
+    if (roles.includes("api_access")) {
+      roles = roles.filter((r) => r !== "api_access");
+      userChanged = true;
     }
-    // Developer must match current template (no api_access)
+    if (name === "user" && roles.length === 1 && roles[0] === "consumer") {
+      roles = [...ROLE_SET.user];
+      userChanged = true;
+    }
     if (name === "developer") {
       const want = [...ROLE_SET.developer];
       const same =
-        u.roles.length === want.length && want.every((r) => u.roles.includes(r)) && u.roles.every((r) => want.includes(r));
+        roles.length === want.length && want.every((r) => roles.includes(r)) && roles.every((r) => want.includes(r));
       if (!same) {
-        changed = true;
-        return { ...u, roles: want };
+        roles = want;
+        userChanged = true;
       }
     }
-    // Old admin role set without api_access / builder
-    if (name === "admin" && (u.roles.includes("admin") || u.roles.includes("platform-admin"))) {
-      const missing =
-        !u.roles.includes("api_access") ||
-        !u.roles.includes("builder") ||
-        !u.roles.includes("consumer");
+    if (name === "admin" && (roles.includes("admin") || roles.includes("platform-admin"))) {
+      const missing = !roles.includes("builder") || !roles.includes("consumer");
       if (missing) {
-        changed = true;
-        return { ...u, roles: [...new Set([...u.roles, ...ROLE_SET.admin])] };
+        roles = [...new Set([...roles, ...ROLE_SET.admin])];
+        userChanged = true;
       }
     }
-    return u;
+    if (!userChanged) return u;
+    changed = true;
+    return { ...u, roles };
   });
   if (changed) {
     saveUsers(next);

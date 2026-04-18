@@ -1,64 +1,45 @@
-/** Chat / embedding / rerank labels for dropdowns — bundled in the SPA only (no network). */
+/**
+ * Typed filter helpers shared by every model dropdown.
+ *
+ * The actual list of models comes from `useLiteLLMModels()`, which talks to
+ * `GET /api/v1/litellm/models` via api-service. When the backend flag is off
+ * the hook yields a tiny offline fallback so dev still works.
+ */
+
 export type LiteLLMModelKind = "llm" | "embedding" | "rerank";
 
 export type LiteLLMModelOption = {
   id: string;
   label: string;
   kind: LiteLLMModelKind;
-  /** When true, model is shown when “Multi-model only” is selected for agents (LiteLLM-style routing). */
+  /** When true, model is shown under "Multi-model only" on the agent form. */
   multiModel?: boolean;
 };
-
-const STATIC_MODEL_CATALOG: LiteLLMModelOption[] = [
-  { id: "gpt-4o-mini", label: "gpt-4o-mini (demo catalog)", kind: "llm", multiModel: true },
-  { id: "gpt-4o", label: "gpt-4o (demo catalog)", kind: "llm", multiModel: true },
-  {
-    id: "claude-3-5-sonnet-20241022",
-    label: "Claude 3.5 Sonnet (demo catalog)",
-    kind: "llm",
-    multiModel: true,
-  },
-  { id: "text-embedding-3-small", label: "text-embedding-3-small (demo catalog)", kind: "embedding" },
-  { id: "text-embedding-3-large", label: "text-embedding-3-large (demo catalog)", kind: "embedding" },
-  { id: "rerank-english-v3.0", label: "rerank-english-v3.0 (demo catalog)", kind: "rerank" },
-];
-
-/** Deterministic in-browser catalog — replaces any previous LiteLLM HTTP fetch. */
-export function listStaticLiteLLMModels(): LiteLLMModelOption[] {
-  return STATIC_MODEL_CATALOG.map((m) => ({ ...m }));
-}
 
 /** LLM chat models only (excludes embedding / rerank). */
 export function filterLLMModels(models: LiteLLMModelOption[]): LiteLLMModelOption[] {
   return models.filter((x) => x.kind === "llm");
 }
 
-/**
- * LLM models for the agent form. When `onlyMultiModel` is true, only entries flagged `multiModel` appear.
- */
+/** LLM models for the agent form. When `onlyMultiModel` is true, only multi-model entries pass. */
 export function filterLLMModelsForAgent(
   models: LiteLLMModelOption[],
   onlyMultiModel: boolean,
 ): LiteLLMModelOption[] {
   const llm = filterLLMModels(models);
-  if (!onlyMultiModel) return llm;
-  return llm.filter((m) => m.multiModel);
+  return onlyMultiModel ? llm.filter((m) => m.multiModel) : llm;
 }
 
-/** Embedding models for RAG / ingestion dropdowns. */
+/** Embedding models. Heuristic fallback matches names when `kind` isn't set. */
 export function filterEmbeddingLike(models: LiteLLMModelOption[]): LiteLLMModelOption[] {
   const byKind = models.filter((x) => x.kind === "embedding");
   if (byKind.length) return byKind;
-  const m = models.filter((x) => /embed|embedding|ada-002|e5|bge|voyage/i.test(x.id));
-  return m.length ? m : listStaticLiteLLMModels().filter((x) => x.kind === "embedding");
+  return models.filter((x) => /embed|embedding|ada-002|e5|bge|voyage/i.test(x.id));
 }
 
-/** Rerank models. */
+/** Rerank models. Same heuristic fallback pattern. */
 export function filterRerankLike(models: LiteLLMModelOption[]): LiteLLMModelOption[] {
   const byKind = models.filter((x) => x.kind === "rerank");
   if (byKind.length) return byKind;
-  const m = models.filter((x) => /rerank|rank/i.test(x.id));
-  if (m.length) return m;
-  const fb = listStaticLiteLLMModels().find((x) => x.kind === "rerank");
-  return fb ? [fb] : [];
+  return models.filter((x) => /rerank|rank/i.test(x.id));
 }

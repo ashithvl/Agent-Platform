@@ -6,7 +6,6 @@ import { RequireAuth } from "./auth/RequireAuth";
 import { RoleRoute } from "./auth/RoleRoute";
 import AppShell from "./layouts/AppShell";
 import AgentsPage from "./pages/AgentsPage";
-import ApiAccessPage from "./pages/ApiAccessPage";
 import ChatPage from "./pages/ChatPage";
 import Dashboard from "./pages/Dashboard";
 import DataIngestionPage from "./pages/DataIngestionPage";
@@ -20,10 +19,8 @@ import ToolsPage from "./pages/ToolsPage";
 import WorkflowEditorPage from "./pages/WorkflowEditorPage";
 import WorkflowsPage from "./pages/WorkflowsPage";
 
-/** Workspace areas shared by end users and developers (no API keys for end users). */
+/** Workspace builder areas — agents, workflows, knowledge, tools, ingestion. */
 const builderPlus = ["builder", "admin", "platform-admin"] as const;
-/** Invoke URLs & API keys — admins only in this demo (`api_access` on admin account). */
-const apiAccessRoles = ["api_access", "admin", "platform-admin"] as const;
 const chatRoles = ["consumer", "builder", "admin", "platform-admin"] as const;
 const adminPlus = ["admin", "platform-admin"] as const;
 
@@ -61,14 +58,6 @@ export default function App() {
             element={
               <RoleRoute anyOf={[...builderPlus]}>
                 <WorkflowsPage />
-              </RoleRoute>
-            }
-          />
-          <Route
-            path="/api-access"
-            element={
-              <RoleRoute anyOf={[...apiAccessRoles]}>
-                <ApiAccessPage />
               </RoleRoute>
             }
           />

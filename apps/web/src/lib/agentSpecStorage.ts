@@ -1,4 +1,6 @@
+import { apiDelete, apiGet, apiSend } from "./apiClient";
 import type { AgentSpec } from "./specTypes";
+import { STORAGE_AGENTS_BACKEND } from "./storageFlags";
 
 const KEY = "eai_agent_specs_v1";
 export const AGENT_SPECS_CHANGED = "eai-agent-specs-changed";
@@ -181,5 +183,64 @@ export function deleteAgentSpec(id: string, actor: string, isAdmin: boolean): bo
   if (cur.createdBy === "system") return false;
   if (!isAdmin && cur.createdBy !== actor) return false;
   writeAll(all.filter((x) => x.id !== id));
+  return true;
+}
+
+// ---------------------------------------------------------------------------
+// Phase 5 backend adapters.
+// Gated on VITE_STORAGE_AGENTS=1. Callers that want the migrated path use
+// the `*Async` variants; the sync ones above stay on localStorage for anyone
+// who hasn't adopted the flag yet.
+// ---------------------------------------------------------------------------
+
+type BackendListResult = AgentSpec[] | { data: AgentSpec[] };
+
+async function fetchRemoteAgents(): Promise<AgentSpec[]> {
+  const payload = await apiGet<BackendListResult>("/api/v1/agents");
+  const rows = Array.isArray(payload) ? payload : payload.data ?? [];
+  return rows.map((r) => normalizeAgent(r)).filter(Boolean) as AgentSpec[];
+}
+
+export async function listAgentSpecsAsync(): Promise<AgentSpec[]> {
+  if (!STORAGE_AGENTS_BACKEND) return listAgentSpecs();
+  const rows = await fetchRemoteAgents();
+  return [...rows].sort((a, b) => b.updatedAt - a.updatedAt);
+}
+
+export async function createAgentSpecAsync(input: {
+  name: string;
+  model: string;
+  systemPrompt: string;
+  contextVariableNames: string[];
+  toolIds: string[];
+  createdBy: string;
+  status?: "active" | "paused";
+}): Promise<AgentSpec> {
+  if (!STORAGE_AGENTS_BACKEND) return createAgentSpec(input);
+  const now = Date.now();
+  const spec: AgentSpec = {
+    id: genId(),
+    name: input.name.trim() || "Untitled agent",
+    model: input.model,
+    systemPrompt: input.systemPrompt,
+    contextVariableNames: [...new Set(input.contextVariableNames.map((s) => s.trim()).filter(Boolean))],
+    toolIds: [...new Set(input.toolIds)],
+    status: input.status ?? "active",
+    createdBy: input.createdBy,
+    createdAt: now,
+    updatedAt: now,
+  };
+  await apiSend<unknown>("PUT", "/api/v1/agents", { id: spec.id, data: spec });
+  notify();
+  return spec;
+}
+
+export async function deleteAgentSpecAsync(id: string): Promise<boolean> {
+  if (!STORAGE_AGENTS_BACKEND) {
+    // Without backend we still need actor info; callers use the sync path.
+    throw new Error("deleteAgentSpecAsync requires VITE_STORAGE_AGENTS=1");
+  }
+  await apiDelete<unknown>(`/api/v1/agents/${encodeURIComponent(id)}`);
+  notify();
   return true;
 }

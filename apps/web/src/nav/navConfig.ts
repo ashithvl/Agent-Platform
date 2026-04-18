@@ -3,7 +3,7 @@ export type NavGroup = "workspace" | "build" | "operate" | "admin";
 export type NavItem = {
   to: string;
   label: string;
-  icon: "dash" | "agents" | "flow" | "api" | "book" | "wrench" | "layers" | "chat" | "settings" | "shield" | "chart";
+  icon: "dash" | "agents" | "flow" | "book" | "wrench" | "layers" | "chat" | "settings" | "shield" | "chart";
   group: NavGroup;
   /** Any of these roles grants access; empty = any authenticated user */
   anyOf?: readonly string[];
@@ -27,7 +27,6 @@ export const NAV_ITEMS: NavItem[] = [
   { to: "/ingestion", label: "Data ingestion", icon: "layers", group: "build", anyOf: ["builder", "admin", "platform-admin"] },
 
   { to: "/telemetry", label: "Telemetry", icon: "chart", group: "operate" },
-  { to: "/api-access", label: "API access", icon: "api", group: "operate", anyOf: ["api_access", "admin", "platform-admin"] },
 
   { to: "/guardrails", label: "Guardrails", icon: "shield", group: "admin", anyOf: ["admin", "platform-admin"] },
   { to: "/settings", label: "Settings", icon: "settings", group: "admin", anyOf: ["admin", "platform-admin"] },
