@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { apiGet, BACKEND_ENABLED } from "./apiClient";
+import { apiGet } from "./apiClient";
 import type { LiteLLMModelOption } from "./liteLLMModels";
 
 export type LiteLLMModelsState = {
@@ -19,15 +19,6 @@ type OpenAIModelsEntry = {
   mode?: "chat" | "completion" | "embedding" | "rerank" | string;
 };
 
-/** Offline fallback - keeps dropdowns non-empty when VITE_USE_BACKEND is not set. */
-const OFFLINE_FALLBACK: LiteLLMModelOption[] = [
-  { id: "gpt-4o-mini", label: "gpt-4o-mini (offline demo)", kind: "llm", multiModel: true },
-  { id: "gpt-4o", label: "gpt-4o (offline demo)", kind: "llm", multiModel: true },
-  { id: "claude-3-5-sonnet", label: "Claude 3.5 Sonnet (offline demo)", kind: "llm", multiModel: true },
-  { id: "text-embedding-3-small", label: "text-embedding-3-small (offline demo)", kind: "embedding" },
-  { id: "rerank-english-v3.0", label: "rerank-english-v3.0 (offline demo)", kind: "rerank" },
-];
-
 function classify(entry: OpenAIModelsEntry): LiteLLMModelOption {
   const id = entry.id;
   let kind: LiteLLMModelOption["kind"] = "llm";
@@ -40,18 +31,12 @@ function classify(entry: OpenAIModelsEntry): LiteLLMModelOption {
 }
 
 export function useLiteLLMModels(): LiteLLMModelsState {
-  const [models, setModels] = useState<LiteLLMModelOption[]>(() =>
-    BACKEND_ENABLED ? [] : [...OFFLINE_FALLBACK],
-  );
-  const [loading, setLoading] = useState<boolean>(BACKEND_ENABLED);
+  const [models, setModels] = useState<LiteLLMModelOption[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const mounted = useRef(true);
 
   const refresh = useCallback(async () => {
-    if (!BACKEND_ENABLED) {
-      setModels([...OFFLINE_FALLBACK]);
-      return;
-    }
     setLoading(true);
     setError(null);
     try {
@@ -63,7 +48,7 @@ export function useLiteLLMModels(): LiteLLMModelsState {
     } catch (err) {
       if (mounted.current) {
         setError(err instanceof Error ? err.message : String(err));
-        setModels([...OFFLINE_FALLBACK]);
+        setModels([]);
       }
     } finally {
       if (mounted.current) setLoading(false);

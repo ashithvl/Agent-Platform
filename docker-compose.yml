@@ -149,6 +149,7 @@ services:
       # config.yaml references these; empty env can prevent the proxy from starting.
       OPENAI_API_KEY: ${OPENAI_API_KEY:-sk-placeholder-set-real-key-in-infra-litellm-env}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-sk-ant-placeholder-set-real-key-in-infra-litellm-env}
+      COHERE_API_KEY: ${COHERE_API_KEY:-}
     volumes:
       - ./infra/litellm/config.yaml:/app/config.yaml:ro
     command: ["--config", "/app/config.yaml", "--port", "4000"]

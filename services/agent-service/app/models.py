@@ -43,3 +43,35 @@ class Guardrail(Base):
     updated_at = Column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
+
+
+class Tool(Base):
+    __tablename__ = "tools"
+    id = Column(String(64), primary_key=True)
+    owner = Column(String(64), nullable=False, default="system", index=True)
+    data = Column(JSONB, nullable=False)
+    updated_at = Column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
+class Pipeline(Base):
+    """Linear / graph pipeline definitions (distinct from canvas `workflows`)."""
+    __tablename__ = "pipelines"
+    id = Column(String(64), primary_key=True)
+    owner = Column(String(64), nullable=False, default="system", index=True)
+    data = Column(JSONB, nullable=False)
+    updated_at = Column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
+class WorkspacePolicy(Base):
+    """Built-in toggles: PII, secrets, toxicity, URL allowlist."""
+    __tablename__ = "workspace_policies"
+    id = Column(String(64), primary_key=True)
+    owner = Column(String(64), nullable=False, default="system", index=True)
+    data = Column(JSONB, nullable=False)
+    updated_at = Column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )

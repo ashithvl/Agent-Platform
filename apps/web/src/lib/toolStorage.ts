@@ -1,6 +1,6 @@
+import { apiDelete, apiGet, apiSend } from "./apiClient";
 import type { McpTransport, Tool, ToolKind } from "./specTypes";
 
-const KEY = "eai_tools_v1";
 export const TOOLS_CHANGED = "eai-tools-changed";
 
 function notify(): void {
@@ -9,14 +9,11 @@ function notify(): void {
 
 function inferTransport(raw: Record<string, unknown>): McpTransport {
   if (raw.kind === "http") return "http";
-
   const explicit = raw.mcpTransport;
   if (explicit === "http" || explicit === "sse") return explicit;
-
   const legacy = String(raw.transport ?? "").toLowerCase();
   if (legacy === "http") return "http";
   if (legacy === "sse") return "sse";
-
   return "sse";
 }
 
@@ -42,11 +39,9 @@ function normalizeTool(raw: unknown): Tool | null {
   if (!raw || typeof raw !== "object") return null;
   const r = raw as Record<string, unknown>;
   if (typeof r.id !== "string" || typeof r.name !== "string") return null;
-
   const kind: ToolKind = "mcp";
   const mcpTransport = inferTransport(r);
   const mcpConfigJson = normalizeMcpConfigJson(r);
-
   return {
     id: r.id,
     name: r.name,
@@ -60,72 +55,25 @@ function normalizeTool(raw: unknown): Tool | null {
   };
 }
 
-function needsPersistMigration(raw: unknown, _normalized: Tool): boolean {
-  if (!raw || typeof raw !== "object") return true;
-  const r = raw as Record<string, unknown>;
-  if (r.kind && r.kind !== "mcp") return true;
-  if (typeof r.mcpConfigJson !== "string" || !r.mcpConfigJson.trim()) {
-    if (r.serverUrl) return true;
-  }
-  if (!r.mcpTransport && r.transport) return true;
-  return false;
-}
-
-function readAll(): Tool[] {
-  try {
-    const raw = localStorage.getItem(KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as unknown[];
-    if (!Array.isArray(parsed)) return [];
-    let migrated = false;
-    const out: Tool[] = [];
-    for (const item of parsed) {
-      const n = normalizeTool(item);
-      if (n) {
-        if (needsPersistMigration(item, n)) migrated = true;
-        out.push(n);
-      }
-    }
-    if (migrated && out.length) {
-      writeAll(out);
-    }
-    return out;
-  } catch {
-    return [];
-  }
-}
-
-function writeAll(items: Tool[]): void {
-  localStorage.setItem(KEY, JSON.stringify(items));
-  notify();
-}
-
-export function listTools(): Tool[] {
-  return [...readAll()].sort((a, b) => b.createdAt - a.createdAt);
+export async function listTools(): Promise<Tool[]> {
+  const rows = await apiGet<unknown[]>("/api/v1/tools");
+  if (!Array.isArray(rows)) return [];
+  return rows.map(normalizeTool).filter(Boolean).sort((a, b) => b.createdAt - a.createdAt) as Tool[];
 }
 
 function genId(): string {
   return `tool_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
-export function createTool(input: Omit<Tool, "id" | "createdAt">): Tool {
+export async function createTool(input: Omit<Tool, "id" | "createdAt">): Promise<Tool> {
   const now = Date.now();
-  const t: Tool = {
-    ...input,
-    id: genId(),
-    createdAt: now,
-  };
-  const all = readAll();
-  all.push(t);
-  writeAll(all);
+  const t: Tool = { ...input, id: genId(), createdAt: now };
+  await apiSend<unknown>("PUT", "/api/v1/tools", { id: t.id, data: t });
+  notify();
   return t;
 }
 
-export function deleteTool(id: string, actor: string, isAdmin: boolean): boolean {
-  const all = readAll();
-  const cur = all.find((x) => x.id === id);
-  if (!cur) return false;
-  if (!isAdmin && cur.createdBy !== actor) return false;
-  writeAll(all.filter((x) => x.id !== id));
-  return true;
+export async function deleteTool(id: string): Promise<void> {
+  await apiDelete<unknown>(`/api/v1/tools/${encodeURIComponent(id)}`);
+  notify();
 }

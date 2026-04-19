@@ -8,12 +8,8 @@ export function notifyWorkflowCatalogChanged(): void {
   window.dispatchEvent(new CustomEvent(WORKFLOW_CATALOG_CHANGED));
 }
 
-/** Built-in platform workflows plus any saved in this browser. */
-export function getAllWorkflows(): (WorkflowDef | CustomWorkflow)[] {
-  return [...WORKFLOWS, ...listCustomWorkflows()];
-}
-
-export function workflowById(id: string | undefined): (WorkflowDef | CustomWorkflow) | undefined {
-  if (!id) return undefined;
-  return getAllWorkflows().find((w) => w.id === id);
+/** Built-in platform workflows plus custom workflows from the API. */
+export async function loadWorkflowCatalog(): Promise<(WorkflowDef | CustomWorkflow)[]> {
+  const custom = await listCustomWorkflows();
+  return [...WORKFLOWS, ...custom];
 }

@@ -1,4 +1,10 @@
-const KEY = "eai_guardrails_v1";
+import { apiGet, apiSend } from "./apiClient";
+
+export const WORKSPACE_POLICIES_CHANGED = "eai-workspace-policies-changed";
+
+function notify(): void {
+  window.dispatchEvent(new CustomEvent(WORKSPACE_POLICIES_CHANGED));
+}
 
 export type GuardrailPolicy = {
   id: string;
@@ -7,58 +13,28 @@ export type GuardrailPolicy = {
   enabled: boolean;
 };
 
-const DEFAULTS: GuardrailPolicy[] = [
-  {
-    id: "pii",
-    name: "Block PII export",
-    description: "Prevent obvious SSN, card numbers, and national IDs in outputs.",
-    enabled: true,
-  },
-  {
-    id: "secrets",
-    name: "No secrets in responses",
-    description: "Strip API keys and PEM blocks from assistant text.",
-    enabled: true,
-  },
-  {
-    id: "toxicity",
-    name: "Toxicity filter (input)",
-    description: "Reject abusive user turns before they reach the model.",
-    enabled: true,
-  },
-  {
-    id: "urls",
-    name: "Allowlist outbound URLs",
-    description: "Only link to approved corporate domains in answers.",
-    enabled: false,
-  },
-];
-
-function load(): GuardrailPolicy[] {
-  try {
-    const raw = localStorage.getItem(KEY);
-    if (!raw) {
-      localStorage.setItem(KEY, JSON.stringify(DEFAULTS));
-      return [...DEFAULTS];
-    }
-    const parsed = JSON.parse(raw) as GuardrailPolicy[];
-    if (!Array.isArray(parsed) || parsed.length === 0) {
-      localStorage.setItem(KEY, JSON.stringify(DEFAULTS));
-      return [...DEFAULTS];
-    }
-    return parsed;
-  } catch {
-    localStorage.setItem(KEY, JSON.stringify(DEFAULTS));
-    return [...DEFAULTS];
-  }
+function normalizePolicy(raw: unknown): GuardrailPolicy | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  if (typeof r.id !== "string" || typeof r.name !== "string") return null;
+  return {
+    id: r.id,
+    name: r.name,
+    description: typeof r.description === "string" ? r.description : "",
+    enabled: Boolean(r.enabled),
+  };
 }
 
-export function listGuardrails(): GuardrailPolicy[] {
-  return load();
+export async function listGuardrails(): Promise<GuardrailPolicy[]> {
+  const rows = await apiGet<unknown[]>("/api/v1/workspace-policies");
+  if (!Array.isArray(rows)) return [];
+  return rows.map((r) => normalizePolicy(r)).filter(Boolean) as GuardrailPolicy[];
 }
 
-export function setGuardrailEnabled(id: string, enabled: boolean): void {
-  const list = load();
-  const next = list.map((p) => (p.id === id ? { ...p, enabled } : p));
-  localStorage.setItem(KEY, JSON.stringify(next));
+export async function setGuardrailEnabled(id: string, enabled: boolean): Promise<void> {
+  const list = await listGuardrails();
+  const cur = list.find((p) => p.id === id);
+  if (!cur) return;
+  await apiSend<unknown>("PUT", "/api/v1/workspace-policies", { id, data: { ...cur, enabled } });
+  notify();
 }

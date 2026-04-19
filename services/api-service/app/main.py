@@ -7,6 +7,7 @@ Responsibilities:
   - Proxy LiteLLM (never leaking the master key).
   - Serve telemetry/cost rollups written by worker-service.
 """
+import time
 from datetime import date, timedelta
 from typing import Any, Iterable, List, Literal, Optional
 
@@ -27,7 +28,7 @@ import httpx
 
 from .langfuse_client import LangfuseClient
 from .litellm_client import LiteLLMClient
-from .models import Base, TracesIndex, UsageDaily
+from .models import Base, Conversation, TracesIndex, UsageDaily
 
 settings = Settings(service_name="api-service")  # type: ignore[call-arg]
 engine = make_engine(settings)
@@ -312,41 +313,105 @@ async def get_trace_detail(
 
 
 # ---------------------------------------------------------------------------
-# Conversations (stub - real storage lands in Phase 5)
+# Conversations (Postgres JSONB — SPA-shaped payloads)
 # ---------------------------------------------------------------------------
 
 
-class ConversationMessage(BaseModel):
-    role: str
-    content: str
-    timestamp: str | None = None
-
-
-class Conversation(BaseModel):
+class ConversationPayload(BaseModel):
     id: str
-    workflow_id: str = ""
-    messages: list[ConversationMessage] = []
+    data: dict[str, Any]
 
 
-@app.get("/api/v1/conversations", response_model=list[Conversation])
-def list_conversations(_: TokenClaims = Depends(get_claims)) -> list[Conversation]:
-    # Phase 5: back this with Redis (short-term) + Postgres (persistent).
-    return []
+@app.get("/api/v1/conversations")
+def list_conversations(
+    claims: TokenClaims = Depends(get_claims), db: Session = Depends(get_db)
+) -> list[dict[str, Any]]:
+    rows = db.scalars(
+        select(Conversation)
+        .where(Conversation.owner == claims.sub)
+        .order_by(desc(Conversation.updated_at))
+    ).all()
+    return [r.data for r in rows]
 
 
-@app.get("/api/v1/conversations/{conversation_id}", response_model=Conversation)
-def get_conversation(
-    conversation_id: str, _: TokenClaims = Depends(get_claims)
-) -> Conversation:
-    raise HTTPException(status.HTTP_404_NOT_FOUND, "conversations not migrated yet")
+@app.put("/api/v1/conversations")
+def upsert_conversation(
+    body: ConversationPayload,
+    claims: TokenClaims = Depends(get_claims),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    row = db.scalar(select(Conversation).where(Conversation.id == body.id))
+    now_ms = int(time.time() * 1000)
+    payload = {**body.data, "id": body.id, "updatedAt": now_ms}
+    if row is None:
+        db.add(Conversation(id=body.id, owner=claims.sub, data=payload))
+    else:
+        if row.owner != claims.sub:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Not owner")
+        row.data = payload
+    db.commit()
+    return payload
+
+
+@app.delete("/api/v1/conversations/{conversation_id}")
+def delete_conversation(
+    conversation_id: str,
+    claims: TokenClaims = Depends(get_claims),
+    db: Session = Depends(get_db),
+) -> dict[str, str]:
+    row = db.scalar(select(Conversation).where(Conversation.id == conversation_id))
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Not found")
+    if row.owner != claims.sub:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Not owner")
+    db.delete(row)
+    db.commit()
+    return {"deleted": conversation_id}
 
 
 # ---------------------------------------------------------------------------
-# Phase 5 proxies: agent-service and knowledge-service
-#
-# The SPA's per-area feature flags (`VITE_STORAGE_AGENTS`, etc.) point at the
-# routes below. api-service is the only public surface; agent-service and
-# knowledge-service are private to the docker network.
+# execution-service (chat completions via LiteLLM)
+# ---------------------------------------------------------------------------
+
+
+EXECUTION_SERVICE_URL = "http://execution-service:8000"
+
+
+@app.post("/api/v1/execute")
+@limiter.limit("30/minute")
+async def execute_chat(
+    request: Request,
+    body: dict[str, Any],
+    claims: TokenClaims = Depends(get_claims),
+) -> Any:
+    """Authenticated pass-through to execution-service /execute (LiteLLM)."""
+    model = body.get("model")
+    messages = body.get("messages")
+    if not model or not isinstance(model, str):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "model is required")
+    if not isinstance(messages, list) or not messages:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "messages must be a non-empty array")
+    payload = {
+        "user": claims.sub,
+        "agent_id": str(body.get("agent_id", "")),
+        "workflow_id": str(body.get("workflow_id", "")),
+        "workspace_id": str(body.get("workspace_id", "")),
+        "model": model,
+        "messages": messages,
+    }
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        resp = await client.post(
+            f"{EXECUTION_SERVICE_URL.rstrip('/')}/execute",
+            headers={"Content-Type": "application/json"},
+            json=payload,
+        )
+    if resp.status_code >= 400:
+        raise HTTPException(resp.status_code, resp.text)
+    return resp.json()
+
+
+# ---------------------------------------------------------------------------
+# Proxies: agent-service and knowledge-service (private to docker network).
 # ---------------------------------------------------------------------------
 
 
@@ -404,5 +469,8 @@ def _make_proxy_routes(prefix: str, upstream: str) -> None:
 _make_proxy_routes("agents", AGENT_SERVICE_URL)
 _make_proxy_routes("workflows", AGENT_SERVICE_URL)
 _make_proxy_routes("guardrails", AGENT_SERVICE_URL)
+_make_proxy_routes("tools", AGENT_SERVICE_URL)
+_make_proxy_routes("pipelines", AGENT_SERVICE_URL)
+_make_proxy_routes("workspace-policies", AGENT_SERVICE_URL)
 _make_proxy_routes("hubs", KNOWLEDGE_SERVICE_URL)
 _make_proxy_routes("rag-profiles", KNOWLEDGE_SERVICE_URL)

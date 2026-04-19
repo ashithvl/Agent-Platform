@@ -1,14 +1,15 @@
 import type { WorkflowDef } from "../data/workflows";
 
+import { apiDelete, apiGet, apiSend } from "./apiClient";
+import { notifyWorkflowCatalogChanged } from "./workflowCatalog";
+
 /** One node in a workflow canvas; the same agent may appear multiple times. */
 export type WorkflowFlowStep = {
   id: string;
   agentId: string;
-  /** `null` = use agent / platform default at runtime. */
   temperature: number | null;
   topP: number | null;
   topK: number | null;
-  /** Empty string = use the agent’s configured model. */
   modelOverride: string;
 };
 
@@ -18,8 +19,6 @@ export type CustomWorkflow = WorkflowDef & {
   updatedAt: number;
   flowSteps: WorkflowFlowStep[];
 };
-
-const KEY = "eai_custom_workflows_v1";
 
 export const DND_AGENT_ID = "application/x-eai-workflow-agent-id";
 export const DND_STEP_FROM_INDEX = "application/x-eai-workflow-step-from-index";
@@ -67,27 +66,13 @@ function migrateRow(row: unknown): CustomWorkflow | null {
   return { id: r.id, name, description, createdBy: r.createdBy, createdAt, updatedAt, flowSteps };
 }
 
-function load(): CustomWorkflow[] {
-  try {
-    const raw = localStorage.getItem(KEY);
-    if (!raw) return [];
-    const v = JSON.parse(raw) as unknown[];
-    if (!Array.isArray(v)) return [];
-    return v.map(migrateRow).filter(Boolean) as CustomWorkflow[];
-  } catch {
-    return [];
-  }
+export async function listCustomWorkflows(): Promise<CustomWorkflow[]> {
+  const rows = await apiGet<unknown[]>("/api/v1/workflows");
+  if (!Array.isArray(rows)) return [];
+  return rows.map(migrateRow).filter(Boolean) as CustomWorkflow[];
 }
 
-function save(items: CustomWorkflow[]): void {
-  localStorage.setItem(KEY, JSON.stringify(items));
-}
-
-export function listCustomWorkflows(): CustomWorkflow[] {
-  return load();
-}
-
-export function createWorkflow(createdBy: string, name: string, description: string): CustomWorkflow {
+export async function createWorkflow(createdBy: string, name: string, description: string): Promise<CustomWorkflow> {
   const id = `wf_custom_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
   const now = Date.now();
   const w: CustomWorkflow = {
@@ -99,41 +84,34 @@ export function createWorkflow(createdBy: string, name: string, description: str
     updatedAt: now,
     flowSteps: [],
   };
-  const all = load();
-  all.push(w);
-  save(all);
+  await apiSend<unknown>("PUT", "/api/v1/workflows", { id: w.id, data: w });
+  notifyWorkflowCatalogChanged();
   return w;
 }
 
-export function updateCustomWorkflow(
+export async function updateCustomWorkflow(
   id: string,
   patch: { name?: string; description?: string; flowSteps?: WorkflowFlowStep[] },
   username: string,
   isAdmin: boolean,
-): boolean {
-  const all = load();
-  const i = all.findIndex((w) => w.id === id);
-  if (i < 0) return false;
-  const w = all[i];
+): Promise<boolean> {
+  const all = await listCustomWorkflows();
+  const w = all.find((x) => x.id === id);
+  if (!w) return false;
   if (!isAdmin && w.createdBy !== username) return false;
-  all[i] = {
+  const next: CustomWorkflow = {
     ...w,
     ...patch,
     updatedAt: Date.now(),
   };
-  save(all);
+  await apiSend<unknown>("PUT", "/api/v1/workflows", { id, data: next });
+  notifyWorkflowCatalogChanged();
   return true;
 }
 
-export function deleteCustomWorkflow(id: string, username: string, isAdmin: boolean): boolean {
-  const all = load();
-  const idx = all.findIndex((w) => w.id === id);
-  if (idx < 0) return false;
-  const w = all[idx];
-  if (!isAdmin && w.createdBy !== username) return false;
-  all.splice(idx, 1);
-  save(all);
-  return true;
+export async function deleteCustomWorkflow(id: string): Promise<void> {
+  await apiDelete<unknown>(`/api/v1/workflows/${encodeURIComponent(id)}`);
+  notifyWorkflowCatalogChanged();
 }
 
 export function isCustomWorkflow(w: WorkflowDef): w is CustomWorkflow {

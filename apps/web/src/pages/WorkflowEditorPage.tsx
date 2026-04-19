@@ -5,8 +5,8 @@ import { useAuth } from "../auth/AuthContext";
 import { PageChrome } from "../components/PageChrome";
 import { useFlash } from "../components/FlashContext";
 import { AGENT_SPECS_CHANGED, listAgentSpecs } from "../lib/agentSpecStorage";
-import { useSyncedList } from "../lib/useSyncedList";
-import { notifyWorkflowCatalogChanged, workflowById } from "../lib/workflowCatalog";
+import { useRemoteList } from "../lib/useRemoteList";
+import { useWorkflowCatalog } from "../lib/useWorkflowCatalog";
 import {
   DND_AGENT_ID,
   DND_STEP_FROM_INDEX,
@@ -27,10 +27,11 @@ export default function WorkflowEditorPage() {
   const { workflowId } = useParams<{ workflowId: string }>();
   const { user, realmRoles } = useAuth();
   const { showSuccess } = useFlash();
-  const agents = useSyncedList(AGENT_SPECS_CHANGED, listAgentSpecs);
+  const workflows = useWorkflowCatalog();
+  const agents = useRemoteList(AGENT_SPECS_CHANGED, listAgentSpecs);
   const formPrefix = useId();
 
-  const wf = workflowById(workflowId);
+  const wf = useMemo(() => workflows.find((w) => w.id === workflowId), [workflows, workflowId]);
   const username = user?.profile.preferred_username ?? user?.sub ?? "";
   const isAdmin = realmRoles.has("admin") || realmRoles.has("platform-admin");
   const custom = wf && isCustomWorkflow(wf) ? wf : null;
@@ -47,14 +48,14 @@ export default function WorkflowEditorPage() {
   }, [custom]);
 
   useEffect(() => {
-    const w = workflowById(workflowId);
+    const w = workflows.find((x) => x.id === workflowId);
     if (!w) return;
     setName(w.name);
     setDescription(w.description);
     setSteps(isCustomWorkflow(w) ? w.flowSteps : []);
     setSelectedStepId(null);
     setDirty(false);
-  }, [workflowId]);
+  }, [workflowId, workflows]);
 
   const selectedStep = useMemo(
     () => steps.find((s) => s.id === selectedStepId) ?? null,
@@ -135,9 +136,9 @@ export default function WorkflowEditorPage() {
     touchDirty();
   };
 
-  const onSave = () => {
+  const onSave = async () => {
     if (!custom || !workflowId) return;
-    const ok = updateCustomWorkflow(
+    const ok = await updateCustomWorkflow(
       workflowId,
       {
         name: name.trim() || "Untitled workflow",
@@ -148,7 +149,6 @@ export default function WorkflowEditorPage() {
       isAdmin,
     );
     if (ok) {
-      notifyWorkflowCatalogChanged();
       setDirty(false);
       showSuccess("Workflow saved.");
     }

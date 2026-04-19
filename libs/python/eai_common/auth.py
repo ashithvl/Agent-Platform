@@ -49,6 +49,18 @@ def encode_access_token(
 
 
 def decode_access_token(settings: Settings, token: str) -> TokenClaims:
+    # Reject unsigned/non-HS256 tokens up-front so callers see a useful
+    # message instead of PyJWT's bare "alg value is not allowed" string.
+    try:
+        unverified_header = jwt.get_unverified_header(token)
+    except jwt.PyJWTError as exc:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, f"Malformed token: {exc}") from exc
+    alg = unverified_header.get("alg")
+    if alg != "HS256":
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED,
+            f"Unsupported token algorithm '{alg}'. Sign in again to refresh.",
+        )
     try:
         data = jwt.decode(
             token,

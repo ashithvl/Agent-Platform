@@ -4,17 +4,20 @@ import { useAuth } from "../auth/AuthContext";
 import { EmptyState } from "../components/EmptyState";
 import { PageChrome } from "../components/PageChrome";
 import { AGENT_SPECS_CHANGED, listAgentSpecs } from "../lib/agentSpecStorage";
-import { useSyncedList } from "../lib/useSyncedList";
+import { useRemoteList } from "../lib/useRemoteList";
 import { useWorkflowCatalog } from "../lib/useWorkflowCatalog";
 
 export default function Dashboard() {
   const { realmRoles } = useAuth();
   const workflows = useWorkflowCatalog();
-  const agentSpecs = useSyncedList(AGENT_SPECS_CHANGED, listAgentSpecs);
+  const agentSpecs = useRemoteList(AGENT_SPECS_CHANGED, listAgentSpecs);
   const isBuilder = realmRoles.has("builder") || realmRoles.has("admin") || realmRoles.has("platform-admin");
 
   return (
-    <PageChrome title="Dashboard" description="Overview of your AI workspace — demo data, stored locally.">
+    <PageChrome
+      title="Dashboard"
+      description="Overview of your AI workspace — agents and workflows are loaded from the API when the backend is enabled."
+    >
       {!isBuilder ? (
         <div
           className="mt-6 rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm leading-relaxed text-sky-950"
@@ -82,7 +85,7 @@ export default function Dashboard() {
                 <Link className="font-medium text-neutral-900 underline-offset-4 hover:underline" to="/knowledge">
                   Knowledge hub
                 </Link>
-                <span className="text-neutral-600"> — Hubs, audiences, and approvals.</span>
+                <span className="text-neutral-600"> — Hubs, sources, ingestion settings, and visibility.</span>
               </li>
             ) : null}
           </ul>

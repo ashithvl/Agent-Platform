@@ -1,46 +1,48 @@
+import { apiDelete, apiGet, apiSend } from "./apiClient";
 import type { NeMoGuardrailConfig, NeMoPlacement } from "./specTypes";
 
-const KEY = "eai_nemo_rails_v1";
 export const NEMO_RAILS_CHANGED = "eai-nemo-rails-changed";
 
 function notify(): void {
   window.dispatchEvent(new CustomEvent(NEMO_RAILS_CHANGED));
 }
 
-function readAll(): NeMoGuardrailConfig[] {
-  try {
-    const raw = localStorage.getItem(KEY);
-    if (!raw) return [];
-    const v = JSON.parse(raw) as NeMoGuardrailConfig[];
-    return Array.isArray(v) ? v : [];
-  } catch {
-    return [];
-  }
+function normalizeRail(raw: unknown): NeMoGuardrailConfig | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  if (typeof r.id !== "string" || typeof r.name !== "string") return null;
+  const placement = r.placement;
+  const p: NeMoPlacement =
+    placement === "before_model" || placement === "after_model" || placement === "after_tool"
+      ? placement
+      : "generic";
+  return {
+    id: r.id,
+    name: r.name,
+    rawConfig: typeof r.rawConfig === "string" ? r.rawConfig : "",
+    placement: p,
+    createdBy: typeof r.createdBy === "string" ? r.createdBy : "unknown",
+    createdAt: typeof r.createdAt === "number" ? r.createdAt : Date.now(),
+    updatedAt: typeof r.updatedAt === "number" ? r.updatedAt : Date.now(),
+  };
 }
 
-function writeAll(items: NeMoGuardrailConfig[]): void {
-  localStorage.setItem(KEY, JSON.stringify(items));
-  notify();
-}
-
-export function listNeMoRails(): NeMoGuardrailConfig[] {
-  return [...readAll()].sort((a, b) => b.updatedAt - a.updatedAt);
-}
-
-export function getNeMoRail(id: string): NeMoGuardrailConfig | undefined {
-  return readAll().find((x) => x.id === id);
+export async function listNeMoRails(): Promise<NeMoGuardrailConfig[]> {
+  const rows = await apiGet<unknown[]>("/api/v1/guardrails");
+  if (!Array.isArray(rows)) return [];
+  return rows.map((r) => normalizeRail(r)).filter(Boolean).sort((a, b) => b.updatedAt - a.updatedAt) as NeMoGuardrailConfig[];
 }
 
 function genId(): string {
   return `nemo_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
-export function createNeMoRail(input: {
+export async function createNeMoRail(input: {
   name: string;
   rawConfig: string;
   placement: NeMoPlacement;
   createdBy: string;
-}): NeMoGuardrailConfig {
+}): Promise<NeMoGuardrailConfig> {
   const now = Date.now();
   const n: NeMoGuardrailConfig = {
     id: genId(),
@@ -51,34 +53,12 @@ export function createNeMoRail(input: {
     createdAt: now,
     updatedAt: now,
   };
-  const all = readAll();
-  all.push(n);
-  writeAll(all);
+  await apiSend<unknown>("PUT", "/api/v1/guardrails", { id: n.id, data: n });
+  notify();
   return n;
 }
 
-export function updateNeMoRail(
-  id: string,
-  actor: string,
-  isAdmin: boolean,
-  patch: Partial<Pick<NeMoGuardrailConfig, "name" | "rawConfig" | "placement">>,
-): boolean {
-  const all = readAll();
-  const i = all.findIndex((x) => x.id === id);
-  if (i < 0) return false;
-  const cur = all[i];
-  if (!isAdmin && cur.createdBy !== actor) return false;
-  const now = Date.now();
-  all[i] = { ...cur, ...patch, updatedAt: now };
-  writeAll(all);
-  return true;
-}
-
-export function deleteNeMoRail(id: string, actor: string, isAdmin: boolean): boolean {
-  const all = readAll();
-  const cur = all.find((x) => x.id === id);
-  if (!cur) return false;
-  if (!isAdmin && cur.createdBy !== actor) return false;
-  writeAll(all.filter((x) => x.id !== id));
-  return true;
+export async function deleteNeMoRail(id: string): Promise<void> {
+  await apiDelete<unknown>(`/api/v1/guardrails/${encodeURIComponent(id)}`);
+  notify();
 }

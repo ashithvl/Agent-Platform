@@ -9,7 +9,7 @@ import { TablePagination } from "../components/TablePagination";
 import { usePagination } from "../hooks/usePagination";
 import type { McpTransport } from "../lib/specTypes";
 import { TOOLS_CHANGED, createTool, deleteTool, listTools } from "../lib/toolStorage";
-import { useSyncedList } from "../lib/useSyncedList";
+import { useRemoteList } from "../lib/useRemoteList";
 
 const DEFAULT_MCP_CONFIG = `{
   "url": "https://example.com/mcp"
@@ -49,7 +49,7 @@ export default function ToolsPage() {
   const { showSuccess } = useFlash();
   const username = user?.profile.preferred_username ?? user?.sub ?? "";
   const isAdmin = realmRoles.has("admin") || realmRoles.has("platform-admin");
-  const tools = useSyncedList(TOOLS_CHANGED, listTools);
+  const tools = useRemoteList(TOOLS_CHANGED, listTools);
   const toolsPage = usePagination(tools, 10);
 
   const [name, setName] = useState("");
@@ -74,7 +74,7 @@ export default function ToolsPage() {
     resetForm();
   };
 
-  const onCreate = (e: FormEvent) => {
+  const onCreate = async (e: FormEvent) => {
     e.preventDefault();
     if (!name.trim()) {
       setFormErr("Name is required.");
@@ -94,15 +94,16 @@ export default function ToolsPage() {
       }
     }
     setFormErr(null);
-    createTool({
+    const input = {
       name: name.trim(),
-      kind: "mcp",
+      kind: "mcp" as const,
       description: description.trim(),
       createdBy: username,
       mcpTransport,
       mcpConfigJson: cfg.value,
       headersJson: headersJson.trim() || undefined,
-    });
+    };
+    await createTool(input);
     showSuccess("Tool saved.");
     setRegisterOpen(false);
     resetForm();
@@ -111,7 +112,7 @@ export default function ToolsPage() {
   return (
     <PageChrome
       title="Tools"
-      description="Register MCP server metadata for agents (SSE or HTTP transport). Stored in this browser only — no remote execution."
+      description="Register MCP server metadata for agents (SSE or HTTP transport). Definitions are stored in Postgres and used when building agent runs."
       actions={
         <button
           type="button"
@@ -256,8 +257,7 @@ export default function ToolsPage() {
                         type="button"
                         className="text-xs text-red-700 underline"
                         onClick={() => {
-                          deleteTool(t.id, username, isAdmin);
-                          showSuccess("Tool removed.");
+                          void deleteTool(t.id).then(() => showSuccess("Tool removed."));
                         }}
                       >
                         Delete

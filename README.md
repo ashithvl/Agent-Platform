@@ -56,13 +56,8 @@ The **Telemetry** page shows real cost/request/token rollups broken down by user
 `apps/web/.env.local`:
 
 ```
-VITE_USE_BACKEND=1          # auth + api go through services instead of localStorage
-VITE_STORAGE_AGENTS=1       # agents CRUD via /api/v1/agents (Phase 5)
-VITE_STORAGE_WORKFLOWS=0    # not flipped yet - still localStorage
-...
+VITE_USE_BACKEND=1          # auth + API; agents, workflows, hubs, RAG profiles, tools, policies, NeMo rails, chat → Postgres
 ```
-
-Each `VITE_STORAGE_*` migrates one area at a time without breaking the others.
 
 ## Local-only (no backend)
 

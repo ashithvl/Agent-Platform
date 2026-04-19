@@ -24,7 +24,7 @@ export const NAV_ITEMS: NavItem[] = [
   { to: "/workflows", label: "Workflow", icon: "flow", group: "build", anyOf: ["builder", "admin", "platform-admin"] },
   { to: "/tools", label: "Tools", icon: "wrench", group: "build", anyOf: ["builder", "admin", "platform-admin"] },
   { to: "/knowledge", label: "Knowledge", icon: "book", group: "build", anyOf: ["builder", "admin", "platform-admin"] },
-  { to: "/ingestion", label: "Data ingestion", icon: "layers", group: "build", anyOf: ["builder", "admin", "platform-admin"] },
+  { to: "/ingestion", label: "RAG & ingestion", icon: "layers", group: "build", anyOf: ["builder", "admin", "platform-admin"] },
 
   { to: "/telemetry", label: "Telemetry", icon: "chart", group: "operate" },
 

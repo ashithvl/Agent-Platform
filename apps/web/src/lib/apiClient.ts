@@ -1,18 +1,17 @@
 /**
- * Thin fetch wrapper used by every page that talks to a real backend.
+ * Thin fetch wrapper used by every page that talks to the backend.
  *
- * Backends live behind nginx at /api (api-service) and /auth (auth-service).
- * The SPA ships bearer tokens from `sessionStorage` on every call; no cookies,
- * no CSRF complexity.
- *
- * A compile-time feature flag (`VITE_USE_BACKEND=1`) lets each localStorage
- * module fall back to in-browser storage while the Phase-5 migrations land.
+ * Routes: `/api/*` (api-service) and `/auth/*` (auth-service), proxied by nginx
+ * or the Vite dev server. Bearer token is read from `sessionStorage`.
  */
 
 const SESSION_TOKEN_KEY = "eai_access_token";
 
-export const BACKEND_ENABLED: boolean =
-  typeof import.meta !== "undefined" && import.meta.env?.VITE_USE_BACKEND === "1";
+/** The SPA is backend-only; all entity and auth calls go through services. */
+export const BACKEND_ENABLED = true;
+
+/** Paths that must NOT trigger the auto-logout flow (else login itself bounces). */
+const AUTH_BYPASS_PATHS = ["/auth/login"];
 
 function authHeader(): Record<string, string> {
   const t = sessionStorage.getItem(SESSION_TOKEN_KEY);
@@ -29,7 +28,20 @@ export class ApiError extends Error {
   }
 }
 
-async function throwForStatus(res: Response): Promise<never> {
+/**
+ * Drop a stale/invalid token and notify the app so AuthContext can sign the
+ * user out. Called on 401 from any request other than the login endpoint.
+ */
+function purgeSessionAndSignal(): void {
+  if (typeof sessionStorage !== "undefined") {
+    sessionStorage.removeItem(SESSION_TOKEN_KEY);
+  }
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("eai-auth-invalidated"));
+  }
+}
+
+async function throwForStatus(res: Response, path: string): Promise<never> {
   let detail: unknown = null;
   let message = `${res.status} ${res.statusText}`;
   try {
@@ -41,12 +53,15 @@ async function throwForStatus(res: Response): Promise<never> {
   } catch {
     /* body is not JSON; keep the status line as the message */
   }
+  if (res.status === 401 && !AUTH_BYPASS_PATHS.some((p) => path.startsWith(p))) {
+    purgeSessionAndSignal();
+  }
   throw new ApiError(res.status, detail, message);
 }
 
 export async function apiGet<T>(path: string): Promise<T> {
   const res = await fetch(path, { headers: { ...authHeader() } });
-  if (!res.ok) await throwForStatus(res);
+  if (!res.ok) await throwForStatus(res, path);
   return (await res.json()) as T;
 }
 
@@ -63,7 +78,7 @@ export async function apiSend<T>(
     },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
-  if (!res.ok) await throwForStatus(res);
+  if (!res.ok) await throwForStatus(res, path);
   if (res.status === 204) return undefined as unknown as T;
   return (await res.json()) as T;
 }

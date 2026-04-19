@@ -15,6 +15,7 @@ from sqlalchemy import (
     String,
     func,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase
 
 
@@ -62,3 +63,16 @@ class TracesIndex(Base):
     cost_usd = Column(Numeric(12, 4), nullable=False, default=0)
     latency_ms = Column(Integer, nullable=False, default=0)
     started_at = Column(DateTime(timezone=True), nullable=False)
+
+
+class Conversation(Base):
+    """Chat threads owned by a single user (`owner` = JWT sub)."""
+
+    __tablename__ = "conversations"
+
+    id = Column(String(80), primary_key=True)
+    owner = Column(String(64), nullable=False, index=True)
+    data = Column(JSONB, nullable=False)
+    updated_at = Column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )

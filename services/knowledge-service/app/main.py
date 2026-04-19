@@ -51,9 +51,57 @@ SessionFactory = make_session_factory(settings)
 app = FastAPI(title=settings.service_name, version="0.1.0")
 
 
+def _seed_hubs(db: Session) -> None:
+    if db.scalar(select(func.count()).select_from(KnowledgeHub)) != 0:
+        return
+    now = int(time.time() * 1000)
+    seeds = [
+        {
+            "id": "kh_seed_platform",
+            "title": "Platform runbooks",
+            "description": "Shared operational context for builders.",
+            "ownerUsername": "admin",
+            "audiences": ["developer", "admin"],
+            "complianceNotes": ["Incident template v1", "SLO definitions", "Rollback checklist"],
+            "createdAt": now,
+            "updatedAt": now,
+            "sources": [],
+            "ocrEnabled": False,
+            "extractionLibrary": "auto",
+            "indexingMode": "chunked_semantic",
+            "metadataRequired": False,
+            "metadataPairs": [{"key": "domain", "value": "platform"}],
+        },
+        {
+            "id": "kh_seed_user",
+            "title": "End-user help center",
+            "description": "Customer-facing snippets and safe answers.",
+            "ownerUsername": "admin",
+            "audiences": ["end_user"],
+            "complianceNotes": ["Brand voice 2025", "Refund policy summary"],
+            "createdAt": now,
+            "updatedAt": now,
+            "sources": [],
+            "ocrEnabled": False,
+            "extractionLibrary": "plain_text",
+            "indexingMode": "chunked_semantic",
+            "metadataRequired": False,
+            "metadataPairs": [{"key": "domain", "value": "support"}],
+        },
+    ]
+    for row in seeds:
+        db.add(KnowledgeHub(id=row["id"], owner="system", data=dict(row)))
+    db.commit()
+
+
 @app.on_event("startup")
 def on_startup() -> None:
     Base.metadata.create_all(engine)
+    db = SessionFactory()
+    try:
+        _seed_hubs(db)
+    finally:
+        db.close()
 
 
 def get_db() -> Iterable[Session]:

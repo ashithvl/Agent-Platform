@@ -7,7 +7,7 @@
  */
 
 import { apiGet, apiPost } from "../lib/apiClient";
-import type { CreatableRole } from "./localUsers";
+import type { CreatableRole } from "./types";
 
 type LoginResponse = {
   access_token: string;

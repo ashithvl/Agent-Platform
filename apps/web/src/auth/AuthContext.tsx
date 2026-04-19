@@ -1,8 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 
-import { BACKEND_ENABLED } from "../lib/apiClient";
+import { ApiError, apiGet } from "../lib/apiClient";
 import { backendLogin } from "./backendAuth";
-import { loginLocal } from "./localUsers";
 import { realmRolesFromAccessToken } from "./roles";
 
 const STORAGE_KEY = "eai_access_token";
@@ -57,17 +56,60 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const t = sessionStorage.getItem(STORAGE_KEY);
-    if (t) {
-      const u = userFromAccessToken(t);
-      if (u) setUser(u);
-      else sessionStorage.removeItem(STORAGE_KEY);
+    if (!t) {
+      setLoading(false);
+      return;
     }
-    setLoading(false);
+    const u = userFromAccessToken(t);
+    if (!u) {
+      sessionStorage.removeItem(STORAGE_KEY);
+      setLoading(false);
+      return;
+    }
+    // Validate the restored token against auth-service before trusting it.
+    // Stale tokens (e.g. signed with a different JWT_SECRET, or fake tokens
+    // left over from earlier offline flows) get dropped here so the SPA
+    // doesn't keep firing requests with an `alg`/signature that the API
+    // rejects with 401 "Invalid token".
+    let cancelled = false;
+    apiGet<{ username: string }>("/auth/me")
+      .then(() => {
+        if (!cancelled) setUser(u);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        if (err instanceof ApiError && err.status === 401) {
+          sessionStorage.removeItem(STORAGE_KEY);
+          setUser(null);
+        } else {
+          // Network / 5xx: keep the user signed in optimistically; the next
+          // real call will surface the error.
+          setUser(u);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Listen for forced sign-outs from the apiClient (any 401 response).
+  useEffect(() => {
+    const onInvalidated = () => {
+      setUser(null);
+      if (typeof window !== "undefined" && window.location.pathname !== "/login") {
+        window.location.replace(`${window.location.origin}/login`);
+      }
+    };
+    window.addEventListener("eai-auth-invalidated", onInvalidated);
+    return () => window.removeEventListener("eai-auth-invalidated", onInvalidated);
   }, []);
 
   const login = useCallback(async (username: string, password: string) => {
     setError(null);
-    const at = BACKEND_ENABLED ? await backendLogin(username, password) : loginLocal(username, password);
+    const at = await backendLogin(username, password);
     sessionStorage.setItem(STORAGE_KEY, at);
     const u = userFromAccessToken(at);
     if (!u) {

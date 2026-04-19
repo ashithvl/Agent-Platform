@@ -6,7 +6,6 @@ import { useFlash } from "../components/FlashContext";
 import { PageChrome } from "../components/PageChrome";
 import type { WorkflowDef } from "../data/workflows";
 import { createWorkflow, deleteCustomWorkflow, isCustomWorkflow, type CustomWorkflow } from "../lib/workflowStorage";
-import { notifyWorkflowCatalogChanged } from "../lib/workflowCatalog";
 import { useWorkflowCatalog } from "../lib/useWorkflowCatalog";
 
 type CatalogWf = WorkflowDef | CustomWorkflow;
@@ -19,27 +18,24 @@ export default function WorkflowsPage() {
   const username = user?.profile.preferred_username ?? user?.sub ?? "";
   const isAdmin = realmRoles.has("admin") || realmRoles.has("platform-admin");
 
-  const onCreate = () => {
-    const w = createWorkflow(username, "Untitled workflow", "");
-    notifyWorkflowCatalogChanged();
+  const onCreate = async () => {
+    const w = await createWorkflow(username, "Untitled workflow", "");
     showSuccess("Workflow created — add agents on the canvas.");
     navigate(`/workflows/${w.id}`);
   };
 
-  const onDelete = (id: string) => {
+  const onDelete = async (id: string) => {
     if (!window.confirm("Remove this workflow? It will disappear from Chat and the catalog.")) {
       return;
     }
-    if (deleteCustomWorkflow(id, username, isAdmin)) {
-      notifyWorkflowCatalogChanged();
-      showSuccess("Workflow removed.");
-    }
+    await deleteCustomWorkflow(id);
+    showSuccess("Workflow removed.");
   };
 
   return (
     <PageChrome
       title="Workflow"
-      description="Pick a workflow to open the canvas, or create one and drag agents into a sequence. Everything is stored in this browser."
+      description="Pick a workflow to open the canvas, or create one and drag agents into a sequence. Custom workflows are stored in Postgres."
       actions={
         <button
           type="button"

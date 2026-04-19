@@ -1,8 +1,8 @@
 import { type FormEvent, useCallback, useEffect, useId, useMemo, useState } from "react";
 
 import { useAuth } from "../auth/AuthContext";
+import type { CreatableRole } from "../auth/types";
 import { backendCreateUser, backendListUsers } from "../auth/backendAuth";
-import { createLocalUser, listUsersPublic, type CreatableRole } from "../auth/localUsers";
 import { Dialog } from "../components/Dialog";
 import { EmptyTablePlaceholder } from "../components/EmptyTablePlaceholder";
 import { useFlash } from "../components/FlashContext";
@@ -11,7 +11,6 @@ import { BudgetsTab } from "../components/settings/BudgetsTab";
 import { KeysTab } from "../components/settings/KeysTab";
 import { ModelsTab } from "../components/settings/ModelsTab";
 import { ObservabilityTab } from "../components/settings/ObservabilityTab";
-import { BACKEND_ENABLED } from "../lib/apiClient";
 
 type SettingsTab = "session" | "people" | "models" | "keys" | "budgets" | "observability";
 
@@ -21,9 +20,7 @@ export default function SettingsPage() {
   const createUserFormId = useId();
   const { showSuccess } = useFlash();
   const [tab, setTab] = useState<SettingsTab>("people");
-  const [users, setUsers] = useState<{ username: string; roles: string[]; label: string }[]>(
-    () => (BACKEND_ENABLED ? [] : listUsersPublic()),
-  );
+  const [users, setUsers] = useState<{ username: string; roles: string[]; label: string }[]>([]);
   const [createOpen, setCreateOpen] = useState(false);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -33,17 +30,13 @@ export default function SettingsPage() {
 
   const canManage = realmRoles.has("admin") || realmRoles.has("platform-admin");
   const refresh = useCallback(() => {
-    if (BACKEND_ENABLED) {
-      backendListUsers()
-        .then(setUsers)
-        .catch(() => setUsers([]));
-    } else {
-      setUsers(listUsersPublic());
-    }
+    backendListUsers()
+      .then(setUsers)
+      .catch(() => setUsers([]));
   }, []);
 
   useEffect(() => {
-    if (BACKEND_ENABLED) refresh();
+    refresh();
   }, [refresh]);
 
   const sorted = useMemo(
@@ -69,11 +62,7 @@ export default function SettingsPage() {
     setFormErr(null);
     setBusy(true);
     try {
-      if (BACKEND_ENABLED) {
-        await backendCreateUser(username, password, role);
-      } else {
-        createLocalUser(realmRoles, username, password, role);
-      }
+      await backendCreateUser(username, password, role);
       refresh();
       showSuccess("User created.");
       closeCreate();
@@ -108,7 +97,7 @@ export default function SettingsPage() {
   return (
     <PageChrome
       title="Settings"
-      description="Session details and local accounts stored in this browser. Use the People tab to see every user; admins create accounts from a dialog."
+      description="Session details and workspace accounts from auth-service. Use the People tab to list users; admins create accounts from a dialog."
     >
       <div className="mt-6 border-b border-neutral-200" role="tablist" aria-label="Settings sections">
         <div className="flex flex-wrap gap-1">
@@ -160,20 +149,9 @@ export default function SettingsPage() {
             <div>
               <h2 className="text-sm font-semibold uppercase tracking-wide text-neutral-500">All users</h2>
               <p className="mt-1 text-sm text-neutral-600">
-                {BACKEND_ENABLED ? (
-                  <>
-                    Accounts from <code className="rounded bg-neutral-100 px-1 text-xs">auth-service</code>. Seeded:{" "}
-                    <code className="text-xs">admin</code>, <code className="text-xs">developer</code>,{" "}
-                    <code className="text-xs">user</code>.
-                  </>
-                ) : (
-                  <>
-                    Accounts in <code className="rounded bg-neutral-100 px-1 text-xs">localStorage</code>. Seeded:{" "}
-                    <code className="text-xs">admin</code>/<code className="text-xs">admin</code>,{" "}
-                    <code className="text-xs">developer</code>/<code className="text-xs">developer</code>,{" "}
-                    <code className="text-xs">user</code>/<code className="text-xs">user</code>.
-                  </>
-                )}
+                Accounts from <code className="rounded bg-neutral-100 px-1 text-xs">auth-service</code>. Seeded:{" "}
+                <code className="text-xs">admin</code>, <code className="text-xs">developer</code>,{" "}
+                <code className="text-xs">user</code>.
               </p>
             </div>
             {canManage ? (

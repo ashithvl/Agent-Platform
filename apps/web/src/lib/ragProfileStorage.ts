@@ -1,34 +1,28 @@
+import { apiDelete, apiGet, apiSend } from "./apiClient";
 import type { RagProfile, TextSplitterKind } from "./specTypes";
 
-const KEY = "eai_rag_profiles_v1";
 export const RAG_PROFILES_CHANGED = "eai-rag-profiles-changed";
 
 function notify(): void {
   window.dispatchEvent(new CustomEvent(RAG_PROFILES_CHANGED));
 }
 
-function readAll(): RagProfile[] {
-  try {
-    const raw = localStorage.getItem(KEY);
-    if (!raw) return [];
-    const v = JSON.parse(raw) as RagProfile[];
-    return Array.isArray(v) ? v : [];
-  } catch {
-    return [];
-  }
+function normalizeProfile(raw: unknown): RagProfile | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  if (typeof r.id !== "string" || typeof r.name !== "string") return null;
+  return r as unknown as RagProfile;
 }
 
-function writeAll(items: RagProfile[]): void {
-  localStorage.setItem(KEY, JSON.stringify(items));
-  notify();
+export async function listRagProfiles(): Promise<RagProfile[]> {
+  const rows = await apiGet<unknown[]>("/api/v1/rag-profiles");
+  if (!Array.isArray(rows)) return [];
+  const list = rows.map(normalizeProfile).filter(Boolean) as RagProfile[];
+  return [...list].sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
-export function listRagProfiles(): RagProfile[] {
-  return [...readAll()].sort((a, b) => b.updatedAt - a.updatedAt);
-}
-
-export function getRagProfile(id: string): RagProfile | undefined {
-  return readAll().find((x) => x.id === id);
+export function getRagProfile(id: string, profiles: RagProfile[]): RagProfile | undefined {
+  return profiles.find((x) => x.id === id);
 }
 
 function genId(): string {
@@ -52,12 +46,12 @@ const defaultRag = (): Omit<RagProfile, "id" | "name" | "description" | "created
   rerankModel: "",
 });
 
-export function createRagProfile(input: {
+export async function createRagProfile(input: {
   name: string;
   description: string;
   createdBy: string;
   partial?: Partial<RagProfile>;
-}): RagProfile {
+}): Promise<RagProfile> {
   const now = Date.now();
   const base = defaultRag();
   const p: RagProfile = {
@@ -73,29 +67,36 @@ export function createRagProfile(input: {
     createdAt: now,
     updatedAt: now,
   };
-  const all = readAll();
-  all.push(p);
-  writeAll(all);
+  await apiSend<unknown>("PUT", "/api/v1/rag-profiles", { id: p.id, data: p });
+  notify();
   return p;
 }
 
-export function updateRagProfile(id: string, actor: string, isAdmin: boolean, patch: Partial<RagProfile>): boolean {
-  const all = readAll();
-  const i = all.findIndex((x) => x.id === id);
-  if (i < 0) return false;
-  const cur = all[i];
-  if (!isAdmin && cur.createdBy !== actor) return false;
-  const now = Date.now();
-  all[i] = { ...cur, ...patch, id: cur.id, createdBy: cur.createdBy, createdAt: cur.createdAt, updatedAt: now };
-  writeAll(all);
-  return true;
-}
-
-export function deleteRagProfile(id: string, actor: string, isAdmin: boolean): boolean {
-  const all = readAll();
+export async function updateRagProfile(
+  id: string,
+  actor: string,
+  isAdmin: boolean,
+  patch: Partial<RagProfile>,
+): Promise<boolean> {
+  const all = await listRagProfiles();
   const cur = all.find((x) => x.id === id);
   if (!cur) return false;
   if (!isAdmin && cur.createdBy !== actor) return false;
-  writeAll(all.filter((x) => x.id !== id));
+  const now = Date.now();
+  const next: RagProfile = {
+    ...cur,
+    ...patch,
+    id: cur.id,
+    createdBy: cur.createdBy,
+    createdAt: cur.createdAt,
+    updatedAt: now,
+  };
+  await apiSend<unknown>("PUT", "/api/v1/rag-profiles", { id, data: next });
+  notify();
   return true;
+}
+
+export async function deleteRagProfile(id: string): Promise<void> {
+  await apiDelete<unknown>(`/api/v1/rag-profiles/${encodeURIComponent(id)}`);
+  notify();
 }

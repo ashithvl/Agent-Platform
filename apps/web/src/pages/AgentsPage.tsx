@@ -18,7 +18,7 @@ import { filterLLMModelsForAgent } from "../lib/liteLLMModels";
 import type { AgentSpec } from "../lib/specTypes";
 import { TOOLS_CHANGED, listTools } from "../lib/toolStorage";
 import { useLiteLLMModels } from "../lib/useLiteLLMModels";
-import { useSyncedList } from "../lib/useSyncedList";
+import { useRemoteList } from "../lib/useRemoteList";
 
 const VAR_NAME_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
@@ -33,8 +33,8 @@ export default function AgentsPage() {
   const { showSuccess } = useFlash();
   const username = user?.profile.preferred_username ?? user?.sub ?? "";
   const isAdmin = realmRoles.has("admin") || realmRoles.has("platform-admin");
-  const agents = useSyncedList(AGENT_SPECS_CHANGED, listAgentSpecs);
-  const tools = useSyncedList(TOOLS_CHANGED, listTools);
+  const agents = useRemoteList(AGENT_SPECS_CHANGED, listAgentSpecs);
+  const tools = useRemoteList(TOOLS_CHANGED, listTools);
   const { models } = useLiteLLMModels();
   const agentPage = usePagination(agents, 10);
 
@@ -112,7 +112,7 @@ export default function AgentsPage() {
 
   const removeTool = (id: string) => setToolIds((prev) => prev.filter((x) => x !== id));
 
-  const onSubmit = (e: FormEvent) => {
+  const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!name.trim()) {
       setFormErr("Name is required.");
@@ -131,8 +131,8 @@ export default function AgentsPage() {
       setFormErr(
         modelOptions.length === 0
           ? onlyMultiModel
-            ? "No multi-model LLMs in the catalog. Turn off “Multi-model only” or add models in liteLLMModels.ts."
-            : "No LLM models in the bundled catalog."
+            ? "No multi-model LLMs in the catalog. Turn off “Multi-model only” or add models to your LiteLLM proxy."
+            : "No LLM models returned from /api/v1/litellm/models."
           : "Select a model.",
       );
       return;
@@ -140,7 +140,7 @@ export default function AgentsPage() {
     setFormErr(null);
     const uniqueVars = [...new Set(vars)];
     if (editing) {
-      updateAgentSpec(editing.id, username, isAdmin, {
+      await updateAgentSpec(editing.id, {
         name,
         model,
         systemPrompt,
@@ -151,7 +151,7 @@ export default function AgentsPage() {
       setEditing(null);
       showSuccess("Agent updated.");
     } else {
-      createAgentSpec({
+      await createAgentSpec({
         name,
         model,
         systemPrompt,
@@ -172,9 +172,9 @@ export default function AgentsPage() {
     setOnlyMultiModel(false);
   };
 
-  const onDelete = (a: AgentSpec) => {
+  const onDelete = async (a: AgentSpec) => {
     if (!window.confirm(`Delete agent “${a.name}”?`)) return;
-    deleteAgentSpec(a.id, username, isAdmin);
+    await deleteAgentSpec(a.id);
     if (editing?.id === a.id) {
       setEditing(null);
       setCreating(false);
@@ -279,7 +279,7 @@ export default function AgentsPage() {
               </select>
               {modelOptions.length === 0 ? (
                 <p className="mt-1 text-xs text-amber-800">
-                  No models match this filter — adjust multi-model or add LLM entries in liteLLMModels.ts.
+                  No models match this filter — adjust multi-model or configure models on the LiteLLM proxy.
                 </p>
               ) : null}
             </div>
