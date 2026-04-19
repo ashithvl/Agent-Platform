@@ -1,35 +1,57 @@
 # Document-Rag (enterprise stack)
 
-A self-hosted enterprise AI platform: a React SPA plus a microservice backend
-covering auth, LiteLLM control plane, Langfuse-fed telemetry, and
-agents/workflows/knowledge CRUD. Everything runs under `docker compose`;
-Kubernetes/Terraform come later.
+A self-hosted enterprise AI platform: a backend-only React SPA plus a
+microservice backend covering auth, LiteLLM control plane, Langfuse-fed
+telemetry, and agents/workflows/knowledge/chat CRUD. Everything runs under
+`docker compose`; Kubernetes/Terraform come later.
+
+> **Status today:** the SPA always talks to the backend (no localStorage
+> fallback). Auth uses **HS256 JWTs** issued by `auth-service`; entity data
+> lives in **Postgres**; chat goes through **`api-service` → `execution-service` → LiteLLM**;
+> rollups come from a Langfuse → Postgres job that runs every ~15 minutes.
 
 ## Services
 
 | Container | Role |
 | --- | --- |
-| `web` (nginx) | SPA + reverse proxy for `/api`, `/auth` |
-| `auth-service` | Username/password login, JWT (`realm_access.roles`), user CRUD |
-| `api-service` | Public BFF: JWT verify, SlowAPI rate limit, LiteLLM + Langfuse proxy, telemetry rollups |
-| `agent-service` | Agents / workflows / guardrails CRUD (Postgres JSONB) |
-| `execution-service` | LangGraph runner; every call emits a Langfuse trace |
-| `knowledge-service` | Knowledge hubs + RAG profiles CRUD |
-| `ingestion-worker` | TaskIQ worker (PyMuPDF / OCR / embeddings - stub today) |
-| `worker-service` + `worker-scheduler` | TaskIQ worker + scheduler; Langfuse -> Postgres rollup job every 15 min |
-| `postgres` | Databases `eai` (app services) and `litellm` (LiteLLM Prisma schema only) |
+| `web` (nginx) | SPA + reverse proxy for `/api/*`, `/auth/*` |
+| `auth-service` | Username/password login, JWT mint (`realm_access.roles`), user CRUD |
+| `api-service` | Public BFF: JWT verify, SlowAPI rate limit, LiteLLM + Langfuse proxy, telemetry rollups, `/api/v1/execute` pass-through, proxies for agents/workflows/guardrails/tools/pipelines/workspace-policies/hubs/rag-profiles/conversations |
+| `agent-service` | Agents / workflows / guardrails / tools / pipelines / workspace-policies CRUD (Postgres JSONB) |
+| `knowledge-service` | Knowledge hubs + RAG profiles CRUD (Postgres JSONB) |
+| `execution-service` | LiteLLM pass-through today (`/execute`); LangGraph + RAG retrieval planned; emits a Langfuse trace per call |
+| `ingestion-worker` | TaskIQ worker (PyMuPDF / OCR / embeddings — stub today) |
+| `worker-service` + `worker-scheduler` | TaskIQ worker + scheduler; Langfuse → Postgres rollup job every 15 min |
+| `postgres` | Databases `eai` (app services) and `litellm` (LiteLLM Prisma schema) |
 | `postgres-langfuse` | Dedicated DB for Langfuse |
 | `redis` | Sessions, SlowAPI counters, TaskIQ broker |
 | `minio` (+ init) | S3-compatible object store (buckets: `uploads`, `extracts`, `exports`, `langfuse`) |
-| `litellm` | Model gateway (master key stays server-side) |
+| `litellm` | Model gateway (master key stays server-side; SPA never sees it) |
 | `langfuse-web` | Self-hosted Langfuse UI on `:3003` |
+
+## Required env / API keys
+
+Three `.env` files. None of them are committed; copy from the `.example`
+neighbors and fill in real values.
+
+| File | Variable | Required for | Notes |
+| --- | --- | --- | --- |
+| `.env` (repo root) | `JWT_SECRET` | Token signing | Same value used by every Python service. Default is dev-only. |
+| `.env` (repo root) | `LITELLM_MASTER_KEY` | api-service ↔ LiteLLM | Default `sk-dev-master`; rotate in real envs. |
+| `infra/litellm/.env` | `OPENAI_API_KEY` | Real OpenAI inference + embeddings | Required for the default models in `infra/litellm/config.yaml`. |
+| `infra/litellm/.env` | `ANTHROPIC_API_KEY` | Real Anthropic inference | Optional unless you keep the Claude entry in `config.yaml`. |
+| `infra/litellm/.env` | `COHERE_API_KEY` | Cohere rerank in RAG profiles | Only needed if you uncomment `cohere/rerank-*` in `config.yaml`. |
+| `infra/langfuse/.env` | `LANGFUSE_NEXTAUTH_SECRET`, `LANGFUSE_SALT`, `LANGFUSE_ENCRYPTION_KEY` | Langfuse boots | Generate with `openssl rand -base64 32`. |
+| `infra/langfuse/.env` | `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY` | Tracing + telemetry rollups | Created in the Langfuse UI on first login (step 2 below). |
+
+The browser does **not** receive any provider keys. Everything sensitive
+(LiteLLM master key, provider keys, Langfuse secret) stays on the server side.
 
 ## Bring the stack up
 
 ```bash
 cp infra/litellm/.env.example infra/litellm/.env       # add OPENAI / ANTHROPIC keys
-cp infra/langfuse/.env.example infra/langfuse/.env     # set NEXTAUTH_SECRET / SALT
-cp apps/web/.env.example apps/web/.env.local           # opt into backend features
+cp infra/langfuse/.env.example infra/langfuse/.env     # set NEXTAUTH_SECRET / SALT / ENCRYPTION_KEY
 
 docker compose up --build
 ```
@@ -38,37 +60,73 @@ Then:
 
 1. Visit http://localhost:3003 and create the Langfuse org/project.
 2. Copy the public/secret key pair back into `infra/langfuse/.env`.
-3. `docker compose up -d api-service execution-service worker-service worker-scheduler` to pick up the keys.
-4. Open http://localhost:8080 - log in as `admin / admin`, `developer / developer`, or `user / user`.
+3. `docker compose up -d api-service execution-service worker-service worker-scheduler` so they pick up the new keys.
+4. Open http://localhost:8080 — log in as `admin / admin`, `developer / developer`, or `user / user`.
 
-## Admin features in the SPA (admins only)
-
-Settings ->
-- **Models** - manage the LiteLLM catalog (`/model/new`, `/model/delete`, `/model/info`)
-- **Virtual keys** - generate/revoke LiteLLM keys (`/key/generate`, `/key/delete`)
-- **Budgets** - per-key/per-team budgets (`/budget/*`)
-- **Observability** - live Langfuse traces with drill-down (span tree, metadata)
-
-The **Telemetry** page shows real cost/request/token rollups broken down by user / agent / workflow, served by api-service from the `usage_daily` table (populated by `worker-scheduler`).
-
-## Feature flags
-
-`apps/web/.env.local`:
-
-```
-VITE_USE_BACKEND=1          # auth + API; agents, workflows, hubs, RAG profiles, tools, policies, NeMo rails, chat → Postgres
-```
-
-## Local-only (no backend)
-
-Drop `VITE_USE_BACKEND` and run only the SPA:
+### Local SPA dev (against the dockerised backend)
 
 ```bash
-cd apps/web && npm install && npm run dev
+cd apps/web && npm install && npm run dev    # http://localhost:5173
 ```
 
-The SPA falls back to localStorage for users, agents, workflows, knowledge, etc.
+The dev server proxies `/api/*` and `/auth/*` to `http://localhost:8080` (the
+nginx container), so the page behaves exactly like the production build.
 
+## SPA pages
+
+| Path | What it shows |
+| --- | --- |
+| `/login` | Username / password form against `auth-service`; on success stores JWT in `sessionStorage` and validates it via `GET /auth/me`. Stale or wrong-`alg` tokens are auto-purged. |
+| `/dashboard` | Quick counts (agents, workflows, etc.) backed by the API. |
+| `/agents` | CRUD for agent specs (model, system prompt, context vars, tool ids). |
+| `/tools` | MCP tool registry (`sse` / `http` transport + JSON config). |
+| `/workflows`, `/workflows/:id` | Workflow catalog + drag-and-drop canvas (custom workflows persist in Postgres; built-in templates are read-only). |
+| `/knowledge` | Knowledge hubs (audience, compliance notes, sources, extraction + indexing settings). |
+| `/data-ingestion` | RAG profiles (chunking, embedding, hybrid retrieval, optional Cohere rerank). |
+| `/guardrails` | Workspace policies + NeMo card rails (raw Colang/YAML stored for pipeline wiring). |
+| `/chat` | Live chat — picks model + system prompt from the workflow's first agent (or first active agent for built-in templates), persists conversation, and calls `POST /api/v1/execute`. |
+| `/telemetry` | Real cost / request / token rollups by **user / agent / workflow**, served by api-service from `usage_daily`. |
+| `/settings` | Session info, People (auth-service users), and the admin tabs below. |
+
+### Admin tabs (admins only)
+
+`/settings` →
+
+- **Models** — manage the LiteLLM catalog (`/model/new`, `/model/delete`, `/model/info`).
+- **Virtual keys** — generate/revoke LiteLLM keys (`/key/generate`, `/key/delete`).
+- **Budgets** — per-key / per-team budgets (`/budget/*`).
+- **Observability** — live Langfuse traces with drill-down (span tree, metadata).
+
+## Backend API surface
+
+All routes live under the nginx edge on `:8080`.
+
+### `auth-service` (mounted at `/auth/*`)
+
+- `POST /auth/login` → `{ access_token, token_type, expires_in }`
+- `GET  /auth/me`    — current user (used by the SPA on boot to validate the stored JWT)
+- `GET  /auth/users` — list users (any signed-in role)
+- `POST /auth/users` — create user (admin only)
+
+### `api-service` (mounted at `/api/v1/*`)
+
+| Route | Purpose |
+| --- | --- |
+| `POST /api/v1/execute` | Authenticated chat completion. Forwards to `execution-service /execute` with `user = JWT.sub`; rate-limited 30/min. |
+| `GET  /api/v1/litellm/models` | Authenticated, OpenAI-compatible model list (drives every SPA model dropdown). |
+| `GET/POST/DELETE /api/v1/litellm/admin/{models,keys,budgets}` | Admin-only LiteLLM control plane (master key stays server-side). |
+| `GET  /api/v1/telemetry/summary?dimension=user|agent|workflow` | Daily rollups from `usage_daily`. |
+| `GET  /api/v1/telemetry/traces` / `…/traces/{id}` | Index + detail of recent Langfuse traces. |
+| `GET/PUT/DELETE /api/v1/{agents,workflows,guardrails,tools,pipelines,workspace-policies}` | Proxy to `agent-service`. |
+| `GET/PUT/DELETE /api/v1/{hubs,rag-profiles}` | Proxy to `knowledge-service`. |
+| `GET/PUT/DELETE /api/v1/conversations` | Chat threads (per signed-in user). |
+
+Every protected route requires `Authorization: Bearer <jwt>`. A `401` from
+any route causes the SPA to drop the token and bounce to `/login`.
+
+The **Telemetry** page shows real cost/request/token rollups broken down by
+user / agent / workflow, served by api-service from the `usage_daily` table
+(populated by `worker-scheduler` from Langfuse).
 
 ---
 
@@ -266,18 +324,25 @@ flowchart TB
 
 Notes on what is **implemented today** vs. **planned**:
 
-- Implemented: nginx edge, SPA, auth-service, api-service, agent-service,
-  knowledge-service, execution-service, LiteLLM with separate `litellm` DB,
-  Postgres for app + Langfuse, Redis, MinIO, TaskIQ workers and scheduler,
-  Langfuse self-hosted.
-- Planned (not yet implemented in this repo): NeMo Guardrails,
-  LanceDB/pgvector wiring in `knowledge-service`, audit log object-lock,
-  Vault, full CI/CD, K8s + IaC.
+- **Implemented:** nginx edge, SPA, `auth-service` (HS256 JWT, user CRUD),
+  `api-service` (JWT verify, RBAC, SlowAPI, `/api/v1/execute` pass-through,
+  LiteLLM admin proxy, telemetry rollups, agents/workflows/tools/pipelines/
+  guardrails/workspace-policies/hubs/rag-profiles/conversations proxies),
+  `agent-service`, `knowledge-service`, `execution-service` (LiteLLM
+  forwarder + Langfuse trace per call), LiteLLM with its own `litellm` DB,
+  Postgres for app + Langfuse, Redis, MinIO, TaskIQ workers and scheduler
+  (Langfuse → `usage_daily` rollup every ~15 min), self-hosted Langfuse.
+- **Planned (not yet wired in this repo):** RAG retrieval inside
+  `execution-service` (knowledge → vector search → context injection),
+  NeMo Guardrails enforcement, LanceDB / pgvector adapter in
+  `knowledge-service`, audit-log object-lock, Vault, full CI/CD, K8s + IaC.
 
-### 1.2 Critical-path flow (chat with RAG)
+### 1.2 Critical-path flow (chat)
 
 This is the same content as section 4.1, summarized so the single-page
-reader sees the happy path without scrolling away.
+reader sees the happy path without scrolling away. Steps marked **(planned)**
+are drawn for completeness; the live build skips straight from
+`execution-service` to LiteLLM with no retrieval/guardrail hop.
 
 ```mermaid
 sequenceDiagram
@@ -287,28 +352,28 @@ sequenceDiagram
   participant A as auth-service
   participant API as api-service
   participant E as execution-service
-  participant K as knowledge-service
-  participant V as Vector store
+  participant K as knowledge-service (planned)
+  participant V as Vector store (planned)
   participant L as LiteLLM
   participant P as Provider
   participant LF as Langfuse
 
   U->>N: POST /auth/login
   N->>A: forward
-  A-->>U: JWT (15-60 min)
-  U->>N: POST /api/v1/chat (Bearer JWT, X-Request-Id)
-  N->>API: forward (rate limit, JWT verify)
-  API->>E: /execute { question, trace_id }
-  E->>K: /retrieve
-  K->>V: vector search top-k
-  V-->>K: chunks
-  K-->>E: context
-  E->>L: chat.completions
+  A-->>U: JWT (HS256, ~60 min)
+  U->>N: POST /api/v1/execute (Bearer JWT, X-Request-Id)
+  N->>API: forward (SlowAPI 30/min, JWT verify, RBAC)
+  API->>E: /execute { agent_id, model, messages, user, trace_id }
+  E->>K: /retrieve   %% planned
+  K->>V: vector search top-k   %% planned
+  V-->>K: chunks   %% planned
+  K-->>E: context   %% planned
+  E->>L: chat.completions (model, messages, metadata.trace_id)
   L->>P: provider call (virtual key, budget)
   P-->>L: completion
   L-->>E: completion
-  E-->>API: answer
-  E-.->LF: trace { trace_id, tokens, cost }
+  E-->>API: { answer }
+  E-.->LF: trace { id=trace_id, tokens, cost }
   API-->>N: 200
   N-->>U: 200
 ```
