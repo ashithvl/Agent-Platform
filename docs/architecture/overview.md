@@ -1,9 +1,9 @@
 # Architecture overview
 
 End-to-end picture of the platform as it exists in this repository today.
-Use this as the **main page** of the draw.io submission; the other files in
-`docs/architecture/` (`diagram-extensions.md`, `nfr.md`, `sequence-flows.md`)
-are companion pages that drill into specific concerns.
+This file is the primary layered view; the other files in `docs/architecture/`
+(`diagram-extensions.md`, `nfr.md`, `sequence-flows.md`) add overlays,
+tables, and sequence-level detail.
 
 Legend:
 
@@ -162,7 +162,7 @@ Notes on what is **implemented today** vs. **planned**:
   knowledge-service, execution-service, LiteLLM with separate `litellm` DB,
   Postgres for app + Langfuse, Redis, MinIO, TaskIQ workers and scheduler,
   Langfuse self-hosted.
-- Planned (boxes drawn but dashed in real diagram): NeMo Guardrails,
+- Planned (not yet implemented in this repo): NeMo Guardrails,
   LanceDB/pgvector wiring in `knowledge-service`, audit log object-lock,
   Vault, full CI/CD, K8s + IaC.
 
@@ -233,7 +233,7 @@ flowchart LR
 
 ## 4. Where things live in the repo
 
-| Box on diagram | Path |
+| Component (section 1) | Path |
 |---|---|
 | Edge gateway (nginx) | `infra/nginx/` |
 | React SPA | `apps/web/` |
@@ -254,11 +254,11 @@ flowchart LR
 
 ## 5. Companion documents
 
-For the full assessment submission, ship this overview alongside:
+Read alongside this overview:
 
-- `docs/architecture/diagram-extensions.md` — six overlay pages
-  (tenancy, async vs sync, data lifecycle, mTLS, model lifecycle, correlation tracing).
+- `docs/architecture/diagram-extensions.md` — overlays for tenancy, async vs
+  sync paths, data lifecycle, mTLS, model lifecycle, and correlation tracing.
 - `docs/architecture/nfr.md` — SLO, RPO/RTO, retention, security, capacity,
   environment matrix.
-- `docs/architecture/sequence-flows.md` — three end-to-end sequence diagrams
+- `docs/architecture/sequence-flows.md` — three end-to-end sequence flows
   (chat with RAG, document ingestion, admin model change with audit).

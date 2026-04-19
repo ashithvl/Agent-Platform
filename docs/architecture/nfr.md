@@ -1,6 +1,6 @@
 # Non-functional requirements (NFR)
 
-Companion table to the architecture diagram. Numbers are **target** values for
+Companion tables to the architecture overview. Numbers are **target** values for
 the production environment; staging is one tier below, dev is best-effort.
 
 ---

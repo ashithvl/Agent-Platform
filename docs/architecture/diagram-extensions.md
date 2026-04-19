@@ -1,18 +1,18 @@
 # Diagram extensions
 
-Swimlanes, boundaries, and labels to add to the main draw.io architecture so it
-covers the gaps called out in the rubric review (multi-tenancy, data lifecycle,
-async vs sync paths, service identity, model lifecycle, correlation tracing).
+Swimlanes, boundaries, and labels that extend the main layered architecture
+view for cross-cutting concerns (multi-tenancy, data lifecycle, async vs sync
+paths, service identity, model lifecycle, correlation tracing).
 
-Each section below describes one diagram overlay. The mermaid blocks are
-reference sketches; copy the boxes/edges into the matching draw.io page.
+Each section below is one additive overlay. The mermaid blocks are reference
+views; render them here or reproduce the same structure in your own docs.
 
 ---
 
 ## 1. Tenant / workspace boundary and policy enforcement
 
 Wrap end-user resources inside a `Workspace` boundary and mark every place
-where a policy is evaluated. Same diagram, three colored badges:
+where a policy is evaluated. Use three colored badges on one view:
 
 - `A` = Authentication (who you are)
 - `Z` = Authorization / RBAC (what you can do)
@@ -35,7 +35,7 @@ flowchart LR
   end
 ```
 
-Notes for draw.io:
+**Design notes**
 
 - Use one rounded rectangle per workspace; never let arrows cross workspace
   boundaries except through the **Edge API gateway** or the **Model gateway**.
@@ -45,7 +45,7 @@ Notes for draw.io:
 
 ## 2. Async ingestion vs synchronous inference
 
-Today the diagram tends to show one happy path. Split it explicitly:
+When the layered view shows only a single happy path, split it explicitly:
 
 ```mermaid
 flowchart LR
@@ -77,7 +77,7 @@ Notes:
 
 ## 3. Data lifecycle swimlane
 
-Add a horizontal lifecycle band underneath the layers diagram:
+Add a horizontal lifecycle band under the layered view:
 
 ```mermaid
 flowchart LR
@@ -87,7 +87,7 @@ flowchart LR
   deriveStage --> exportStage[Export_or_erase_DSAR]
 ```
 
-Annotations to put on each store in the diagram:
+Annotations for each store:
 
 - `Postgres operational`: PII columns flagged, daily backup, 35-day PITR, RPO 5m / RTO 30m.
 - `Postgres Langfuse`: trace TTL 90 days, monthly export to cold storage.
@@ -172,10 +172,10 @@ Notes:
 
 ---
 
-## How to apply these in draw.io
+## Applying overlays to the architecture
 
-1. Open the existing six-layer diagram.
-2. Add a new page per overlay above (named after the section).
-3. Cross-reference with link arrows back to the boxes on the main page.
+1. Start from the layered overview (`overview.md`, section 1).
+2. Treat each numbered section above as an optional overlay on that view.
+3. Cross-reference each overlay to the components it annotates in the overview.
 4. Keep the legend (`A` / `Z` / `Q` badges, mTLS dashed line, lifecycle band)
-   on a small sidebar so reviewers don't have to guess.
+   defined once (for example in a glossary or figure caption).

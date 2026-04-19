@@ -1,6 +1,6 @@
 # Sequence flows
 
-Three end-to-end flows that the layered diagram does not show on its own.
+Three end-to-end flows that the layered overview does not spell out step by step.
 Together they prove the platform handles **synchronous chat with retrieval**,
 **asynchronous ingestion**, and **governed admin changes**.
 
@@ -194,11 +194,11 @@ Notes:
 
 ---
 
-## How to use these in the submission
+## Using these flows with the layered view
 
-1. Each section above maps to one **page** in the draw.io file
-   (`Sequence: Chat`, `Sequence: Upload`, `Sequence: Admin model change`).
-2. Keep the same actor/participant naming as the main layered diagram so
-   reviewers can trace boxes back to layers.
+1. Treat each flow above (chat with RAG, upload and index, admin model change)
+   as a separate narrative when you explain the system.
+2. Keep actor and service names aligned with the boxes in `overview.md`
+   (section 1) so each step maps to a concrete component.
 3. The `X-Request-Id` / `trace_id` annotation is the bridge between this file
    and `diagram-extensions.md` (section 6, correlation tracing).

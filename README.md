@@ -79,9 +79,9 @@ The SPA falls back to localStorage for users, agents, workflows, knowledge, etc.
 
 ## Architecture
 
-Single-file submission pack for the enterprise AI platform assessment.
-Combines what used to be four files (`overview`, `diagram-extensions`,
-`nfr`, `sequence-flows`) into one document so reviewers can read top-to-bottom.
+Single document describing the enterprise AI platform architecture. It
+combines what used to be four files (`overview`, `diagram-extensions`, `nfr`,
+`sequence-flows`) so you can read top to bottom in one place.
 
 ### Contents
 
@@ -97,7 +97,7 @@ Combines what used to be four files (`overview`, `diagram-extensions`,
    - 2.4 [Service identity (mTLS) east-west](#24-service-identity-mtls-east-west)
    - 2.5 [Model lifecycle (staging, eval, promotion)](#25-model-lifecycle-staging-eval-promotion)
    - 2.6 [Correlation tracing across services](#26-correlation-tracing-across-services)
-   - 2.7 [How to apply these in draw.io](#27-how-to-apply-these-in-drawio)
+   - 2.7 [Applying overlays to the architecture](#27-applying-overlays-to-the-architecture)
 3. [Non-functional requirements (NFR)](#3-non-functional-requirements-nfr)
    - 3.1 [Service-level objectives (SLO)](#31-service-level-objectives-slo)
    - 3.2 [Availability and disaster recovery](#32-availability-and-disaster-recovery)
@@ -110,7 +110,7 @@ Combines what used to be four files (`overview`, `diagram-extensions`,
    - 4.1 [Authenticated chat with RAG](#41-authenticated-chat-with-rag)
    - 4.2 [Document upload and indexing](#42-document-upload-and-indexing)
    - 4.3 [Admin model change with audit and canary](#43-admin-model-change-with-audit-and-canary)
-   - 4.4 [How to use these in the submission](#44-how-to-use-these-in-the-submission)
+   - 4.4 [Using these flows with the layered view](#44-using-these-flows-with-the-layered-view)
 
 Legend used throughout:
 
@@ -124,8 +124,8 @@ Legend used throughout:
 ## 1. Overview
 
 End-to-end picture of the platform as it exists in this repository today.
-Use this as the **main page** of the draw.io submission; the rest of this
-document drills into specific concerns.
+Section 1.1 is the primary layered view; the rest of this document adds
+cross-cutting detail and operational tables.
 
 ### 1.1 Layered view (six rubric layers)
 
@@ -275,7 +275,7 @@ Notes on what is **implemented today** vs. **planned**:
   knowledge-service, execution-service, LiteLLM with separate `litellm` DB,
   Postgres for app + Langfuse, Redis, MinIO, TaskIQ workers and scheduler,
   Langfuse self-hosted.
-- Planned (boxes drawn but dashed in real diagram): NeMo Guardrails,
+- Planned (not yet implemented in this repo): NeMo Guardrails,
   LanceDB/pgvector wiring in `knowledge-service`, audit log object-lock,
   Vault, full CI/CD, K8s + IaC.
 
@@ -340,7 +340,7 @@ flowchart LR
 
 ### 1.4 Where things live in the repo
 
-| Box on diagram | Path |
+| Component (section 1.1) | Path |
 |---|---|
 | Edge gateway (nginx) | `infra/nginx/` |
 | React SPA | `apps/web/` |
@@ -361,17 +361,17 @@ flowchart LR
 
 ## 2. Diagram extensions (overlays)
 
-Swimlanes, boundaries, and labels to add to the main draw.io architecture so
-it covers cross-cutting concerns (multi-tenancy, data lifecycle, async vs
-sync paths, service identity, model lifecycle, correlation tracing).
+Swimlanes, boundaries, and labels that extend the layered view (section 1.1)
+for cross-cutting concerns: multi-tenancy, data lifecycle, async vs sync paths,
+service identity, model lifecycle, and correlation tracing.
 
-Each subsection below describes one diagram overlay. The mermaid blocks are
-reference sketches; copy the boxes/edges into the matching draw.io page.
+Each subsection is one additive overlay. The mermaid blocks are reference
+views; render them here or reproduce the same structure in your own docs.
 
 ### 2.1 Tenant / workspace boundary and policy enforcement
 
 Wrap end-user resources inside a `Workspace` boundary and mark every place
-where a policy is evaluated. Same diagram, three colored badges:
+where a policy is evaluated. Use three colored badges on one view:
 
 - `A` = Authentication (who you are)
 - `Z` = Authorization / RBAC (what you can do)
@@ -394,7 +394,7 @@ flowchart LR
   end
 ```
 
-Notes for draw.io:
+**Design notes**
 
 - Use one rounded rectangle per workspace; never let arrows cross workspace
   boundaries except through the **Edge API gateway** or the **Model gateway**.
@@ -402,7 +402,7 @@ Notes for draw.io:
 
 ### 2.2 Async ingestion vs synchronous inference
 
-Today the diagram tends to show one happy path. Split it explicitly:
+When the layered view shows only a single happy path, split it explicitly:
 
 ```mermaid
 flowchart LR
@@ -432,7 +432,7 @@ Notes:
 
 ### 2.3 Data lifecycle swimlane
 
-Add a horizontal lifecycle band underneath the layers diagram:
+Add a horizontal lifecycle band under the layered view (section 1.1):
 
 ```mermaid
 flowchart LR
@@ -442,7 +442,7 @@ flowchart LR
   deriveStage --> exportStage[Export_or_erase_DSAR]
 ```
 
-Annotations to put on each store in the diagram:
+Annotations for each store:
 
 - `Postgres operational`: PII columns flagged, daily backup, 35-day PITR, RPO 5m / RTO 30m.
 - `Postgres Langfuse`: trace TTL 90 days, monthly export to cold storage.
@@ -519,19 +519,20 @@ Notes:
   used by `execution-service`, so a single ID joins **HTTP traces**,
   **logs**, and **LLM traces**.
 
-### 2.7 How to apply these in draw.io
+### 2.7 Applying overlays to the architecture
 
-1. Open the existing six-layer diagram (section 1.1).
-2. Add a new page per overlay above (named after the section).
-3. Cross-reference with link arrows back to the boxes on the main page.
+1. Start from the layered view (section 1.1).
+2. Treat each subsection in section 2 as an optional overlay on that view
+   (tenancy, sync vs async, lifecycle, mTLS, model lifecycle, tracing).
+3. Cross-reference each overlay to the components it annotates in section 1.1.
 4. Keep the legend (`A` / `Z` / `Q` badges, mTLS dashed line, lifecycle band)
-   on a small sidebar so reviewers don't have to guess.
+   defined once (for example in a glossary or figure caption).
 
 ---
 
 ## 3. Non-functional requirements (NFR)
 
-Companion table to the architecture diagram. Numbers are **target** values
+Companion tables to the architecture overview (section 1.1). Numbers are **target** values
 for the production environment; staging is one tier below, dev is best-effort.
 
 ### 3.1 Service-level objectives (SLO)
@@ -629,7 +630,7 @@ chargeback per business unit; raw provider invoices reconcile monthly.
 
 ## 4. Sequence flows
 
-Three end-to-end flows that the layered diagram does not show on its own.
+Three end-to-end flows that the layered overview (section 1.1) does not spell out step by step.
 Together they prove the platform handles **synchronous chat with retrieval**,
 **asynchronous ingestion**, and **governed admin changes**.
 
@@ -815,11 +816,11 @@ Notes:
 - End users never see staging or canary models unless their workspace is
   explicitly opted in via virtual-key tags.
 
-### 4.4 How to use these in the submission
+### 4.4 Using these flows with the layered view
 
-1. Each section above maps to one **page** in the draw.io file
-   (`Sequence: Chat`, `Sequence: Upload`, `Sequence: Admin model change`).
-2. Keep the same actor/participant naming as the main layered diagram so
-   reviewers can trace boxes back to layers.
-3. The `X-Request-Id` / `trace_id` annotation is the bridge between this
-   section and the correlation tracing overlay (section 2.6).
+1. Treat each flow above (chat with RAG, upload and index, admin model change)
+   as a separate narrative or appendix when you explain the system.
+2. Keep actor and service names aligned with the boxes in section 1.1 so each
+   step maps to a concrete component.
+3. Use `X-Request-Id` / `trace_id` consistently between HTTP traces and
+   Langfuse (see section 2.6).
